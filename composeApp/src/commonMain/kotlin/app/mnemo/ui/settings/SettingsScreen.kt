@@ -2,6 +2,8 @@ package app.mnemo.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,6 +60,7 @@ import app.mnemo.ui.theme.ThemeMode
 import app.mnemo.ui.theme.ThemeState
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen() {
     val graph = LocalAppGraph.current
@@ -383,7 +386,7 @@ fun SettingsScreen() {
                     color = MnemoColors.text2,
                 )
                 Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     MnemoButton("Export JSON backup", icon = MnemoIcons.Export, onClick = {
                         scope.launch {
                             val text = JsonBackup.export(graph)
@@ -405,7 +408,7 @@ fun SettingsScreen() {
                     color = MnemoColors.text2,
                 )
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     MnemoButton("Save sync file…", icon = MnemoIcons.Export, enabled = !busy, onClick = {
                         scope.launch {
                             val path = saveTextFile("mnemo-sync.json", JsonBackup.export(graph))
@@ -471,7 +474,8 @@ fun SettingsScreen() {
                 Eyebrow("About")
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Mnemo 0.2.0 · Phase 2. Scheduler: FSRS-6 default parameters.",
+                    "Mnemo 0.2.0 · FSRS-6 scheduler" +
+                        (if (graph.usesCustomParameters) " with your optimised parameters." else " with the default parameters."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MnemoColors.text2,
                 )
