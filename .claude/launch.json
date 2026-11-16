@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mnemo-desktop",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": [":composeApp:run", "--console=plain"],
+      "port": 0
+    }
+  ]
+}

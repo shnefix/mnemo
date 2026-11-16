@@ -1,0 +1,119 @@
+CREATE TABLE card (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    note_id INTEGER NOT NULL REFERENCES note(id) ON DELETE CASCADE,
+    template_index INTEGER NOT NULL DEFAULT 0,
+    state INTEGER NOT NULL DEFAULT 0,          -- 0 new, 1 learning, 2 review, 3 relearning
+    due INTEGER NOT NULL,                      -- epoch millis
+    stability REAL,
+    difficulty REAL,
+    elapsed_days INTEGER NOT NULL DEFAULT 0,
+    scheduled_days INTEGER NOT NULL DEFAULT 0,
+    reps INTEGER NOT NULL DEFAULT 0,
+    lapses INTEGER NOT NULL DEFAULT 0,
+    last_review INTEGER,
+    suspended INTEGER NOT NULL DEFAULT 0,
+    buried_until INTEGER,
+    learning_step INTEGER
+);
+
+CREATE INDEX card_note ON card(note_id);
+CREATE INDEX card_due ON card(due);
+CREATE INDEX card_state ON card(state);
+
+-- A card joined with the deck and note it belongs to: what Browse and Review need.
+cardView:
+SELECT card.*, note.deck_id, note.note_type_id, note.fields_json, note.tags, deck.name AS deck_name, note_type.kind AS note_kind, note_type.templates_json
+FROM card
+JOIN note ON note.id = card.note_id
+JOIN deck ON deck.id = note.deck_id
+JOIN note_type ON note_type.id = note.note_type_id
+WHERE card.id = ?;
+
+allCardViews:
+SELECT card.*, note.deck_id, note.note_type_id, note.fields_json, note.tags, deck.name AS deck_name, note_type.kind AS note_kind, note_type.templates_json
+FROM card
+JOIN note ON note.id = card.note_id
+JOIN deck ON deck.id = note.deck_id
+JOIN note_type ON note_type.id = note.note_type_id
+ORDER BY card.due;
+
+selectByNote:
+SELECT * FROM card WHERE note_id = ? ORDER BY template_index;
+
+selectById:
+SELECT * FROM card WHERE id = ?;
+
+-- Due queue for a deck subtree (deck ids passed in), ordered: learning first, then review, then new.
+dueCards:
+SELECT card.* FROM card
+JOIN note ON note.id = card.note_id
+WHERE note.deck_id IN ? AND card.suspended = 0
+  AND (card.buried_until IS NULL OR card.buried_until <= :now)
+  AND card.due <= :now
+ORDER BY CASE card.state WHEN 1 THEN 0 WHEN 3 THEN 0 WHEN 2 THEN 1 ELSE 2 END, card.due;
+
+newCards:
+SELECT card.* FROM card
+JOIN note ON note.id = card.note_id
+WHERE note.deck_id IN ? AND card.suspended = 0 AND card.state = 0
+  AND (card.buried_until IS NULL OR card.buried_until <= :now)
+ORDER BY card.id
+LIMIT :limit;
+
+countByStateDue:
+SELECT card.state, count(*) FROM card
+JOIN note ON note.id = card.note_id
+WHERE note.deck_id IN ? AND card.suspended = 0
+  AND (card.buried_until IS NULL OR card.buried_until <= :now)
+  AND card.due <= :now
+GROUP BY card.state;
+
+countNew:
+SELECT count(*) FROM card
+JOIN note ON note.id = card.note_id
+WHERE note.deck_id IN ? AND card.suspended = 0 AND card.state = 0;
+
+countDueBetween:
+SELECT count(*) FROM card
+JOIN note ON note.id = card.note_id
+WHERE note.deck_id IN ? AND card.suspended = 0 AND card.state != 0
+  AND card.due > :from AND card.due <= :to;
+
+-- All review cards with stability, for mastery / forecast.
+reviewCardsInDecks:
+SELECT card.* FROM card
+JOIN note ON note.id = card.note_id
+WHERE note.deck_id IN ? AND card.suspended = 0 AND card.state != 0;
+
+insert:
+INSERT INTO card(note_id, template_index, state, due) VALUES (?, ?, 0, ?);
+
+lastInsertId:
+SELECT last_insert_rowid();
+
+updateScheduling:
+UPDATE card SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?,
+    reps = ?, lapses = ?, last_review = ?, learning_step = ?
+WHERE id = ?;
+
+setSuspended:
+UPDATE card SET suspended = ? WHERE id = ?;
+
+setBuried:
+UPDATE card SET buried_until = ? WHERE id = ?;
+
+resetCard:
+UPDATE card SET state = 0, due = ?, stability = NULL, difficulty = NULL, elapsed_days = 0, scheduled_days = 0,
+    reps = 0, lapses = 0, last_review = NULL, learning_step = NULL WHERE id = ?;
+
+delete:
+DELETE FROM card WHERE id = ?;
+
+deleteByNote:
+DELETE FROM card WHERE note_id = ?;
+
+countAll:
+SELECT count(*) FROM card;
+
+leeches:
+SELECT card.* FROM card WHERE card.lapses >= ? ORDER BY card.lapses DESC;

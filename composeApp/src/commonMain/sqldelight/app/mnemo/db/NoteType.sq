@@ -1,0 +1,25 @@
+CREATE TABLE note_type (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,              -- basic | reversed | cloze | type
+    fields_json TEXT NOT NULL,       -- ["Front","Back"]
+    templates_json TEXT NOT NULL     -- [{"name":"Card 1","front":"{{Front}}","back":"{{Back}}"}]
+);
+
+selectAll:
+SELECT * FROM note_type ORDER BY id;
+
+selectById:
+SELECT * FROM note_type WHERE id = ?;
+
+selectByKind:
+SELECT * FROM note_type WHERE kind = ? LIMIT 1;
+
+insert:
+INSERT INTO note_type(name, kind, fields_json, templates_json) VALUES (?, ?, ?, ?);
+
+lastInsertId:
+SELECT last_insert_rowid();
+
+count:
+SELECT count(*) FROM note_type;

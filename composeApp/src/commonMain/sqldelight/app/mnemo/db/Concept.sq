@@ -1,0 +1,60 @@
+CREATE TABLE concept (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE card_concept (
+    card_id INTEGER NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+    concept_id INTEGER NOT NULL REFERENCES concept(id) ON DELETE CASCADE,
+    PRIMARY KEY (card_id, concept_id)
+);
+
+CREATE TABLE concept_edge (
+    from_id INTEGER NOT NULL REFERENCES concept(id) ON DELETE CASCADE,
+    to_id INTEGER NOT NULL REFERENCES concept(id) ON DELETE CASCADE,
+    relation TEXT NOT NULL,   -- related_to | prerequisite_of | part_of
+    PRIMARY KEY (from_id, to_id, relation)
+);
+
+selectAll:
+SELECT * FROM concept ORDER BY name;
+
+selectById:
+SELECT * FROM concept WHERE id = ?;
+
+insert:
+INSERT INTO concept(name, description) VALUES (?, ?);
+
+lastInsertId:
+SELECT last_insert_rowid();
+
+update:
+UPDATE concept SET name = ?, description = ? WHERE id = ?;
+
+delete:
+DELETE FROM concept WHERE id = ?;
+
+link:
+INSERT OR IGNORE INTO card_concept(card_id, concept_id) VALUES (?, ?);
+
+unlink:
+DELETE FROM card_concept WHERE card_id = ? AND concept_id = ?;
+
+cardsForConcept:
+SELECT card.* FROM card JOIN card_concept ON card_concept.card_id = card.id WHERE card_concept.concept_id = ?;
+
+conceptsForCard:
+SELECT concept.* FROM concept JOIN card_concept ON card_concept.concept_id = concept.id WHERE card_concept.card_id = ?;
+
+allLinks:
+SELECT * FROM card_concept;
+
+addEdge:
+INSERT OR IGNORE INTO concept_edge(from_id, to_id, relation) VALUES (?, ?, ?);
+
+removeEdge:
+DELETE FROM concept_edge WHERE from_id = ? AND to_id = ? AND relation = ?;
+
+allEdges:
+SELECT * FROM concept_edge;

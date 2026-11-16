@@ -1,0 +1,62 @@
+CREATE TABLE review_log (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    card_id INTEGER NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL,              -- 1 again, 2 hard, 3 good, 4 easy
+    state_before INTEGER NOT NULL,
+    due_before INTEGER NOT NULL,
+    stability_before REAL,
+    difficulty_before REAL,
+    elapsed_days_before INTEGER NOT NULL DEFAULT 0,
+    scheduled_days_before INTEGER NOT NULL DEFAULT 0,
+    reps_before INTEGER NOT NULL DEFAULT 0,
+    lapses_before INTEGER NOT NULL DEFAULT 0,
+    last_review_before INTEGER,
+    learning_step_before INTEGER,
+    response_ms INTEGER NOT NULL DEFAULT 0,
+    mode TEXT NOT NULL DEFAULT 'classic', -- classic | type | speak
+    ai_verdict TEXT,
+    ai_score REAL,
+    user_overrode INTEGER NOT NULL DEFAULT 0,
+    reviewed_at INTEGER NOT NULL
+);
+
+CREATE INDEX review_log_card ON review_log(card_id);
+CREATE INDEX review_log_time ON review_log(reviewed_at);
+
+insert:
+INSERT INTO review_log(card_id, rating, state_before, due_before, stability_before, difficulty_before,
+    elapsed_days_before, scheduled_days_before, reps_before, lapses_before, last_review_before, learning_step_before,
+    response_ms, mode, ai_verdict, ai_score, user_overrode, reviewed_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+lastInsertId:
+SELECT last_insert_rowid();
+
+latest:
+SELECT * FROM review_log ORDER BY reviewed_at DESC, id DESC LIMIT 1;
+
+delete:
+DELETE FROM review_log WHERE id = ?;
+
+since:
+SELECT * FROM review_log WHERE reviewed_at >= ? ORDER BY reviewed_at;
+
+countAll:
+SELECT count(*) FROM review_log;
+
+byCard:
+SELECT * FROM review_log WHERE card_id = ? ORDER BY reviewed_at;
+
+-- Daily counts for the heatmap: day index = reviewed_at / 86400000 (UTC day).
+dailyCounts:
+SELECT (reviewed_at / 86400000) AS day, count(*) AS n, sum(response_ms) AS ms
+FROM review_log WHERE reviewed_at >= ?
+GROUP BY day ORDER BY day;
+
+-- Retention: review-state answers only (state_before = 2), correct = rating > 1.
+retentionSince:
+SELECT sum(CASE WHEN rating > 1 THEN 1 ELSE 0 END) AS correct, count(*) AS total
+FROM review_log WHERE state_before = 2 AND reviewed_at >= ?;
+
+timeSpentSince:
+SELECT sum(response_ms) FROM review_log WHERE reviewed_at >= ?;

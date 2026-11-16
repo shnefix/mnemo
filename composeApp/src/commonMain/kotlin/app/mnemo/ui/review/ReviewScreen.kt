@@ -1,0 +1,544 @@
+package app.mnemo.ui.review
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import app.mnemo.LocalAppGraph
+import app.mnemo.domain.model.CardState
+import app.mnemo.domain.model.Rating
+import app.mnemo.domain.model.ReviewMode
+import app.mnemo.domain.review.AnswerMatcher
+import app.mnemo.platform.isMobilePlatform
+import app.mnemo.ui.components.IconActionButton
+import app.mnemo.ui.components.Kbd
+import app.mnemo.ui.components.MarkdownText
+import app.mnemo.ui.components.MnemoButton
+import app.mnemo.ui.components.MnemoIcons
+import app.mnemo.ui.components.MnemoTextField
+import app.mnemo.ui.components.Segmented
+import app.mnemo.ui.nav.LocalWindowSize
+import app.mnemo.ui.nav.WindowSize
+import app.mnemo.ui.theme.MnemoColors
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+@Composable
+fun ReviewScreen(
+    deckId: Long?,
+    onExit: () -> Unit,
+    onEdit: (noteId: Long) -> Unit,
+) {
+    val graph = LocalAppGraph.current
+    val vm: ReviewViewModel = viewModel(key = "review-$deckId") { ReviewViewModel(graph, deckId) }
+    val state by vm.state.collectAsState()
+    val compact = LocalWindowSize.current == WindowSize.Compact
+    val focus = remember { FocusRequester() }
+
+    LaunchedEffect(state.view?.card?.id) { if (state.mode != ReviewMode.Type) focus.requestFocus() }
+    LaunchedEffect(state.toast) {
+        if (state.toast != null) {
+            delay(2200)
+            vm.dismissToast()
+        }
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MnemoColors.background)
+            .focusRequester(focus)
+            .focusable()
+            .onPreviewKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (state.mode == ReviewMode.Type &&
+                    !state.revealed &&
+                    e.key != Key.Enter &&
+                    e.key != Key.Escape
+                ) {
+                    return@onPreviewKeyEvent false
+                }
+                when (e.key) {
+                    Key.Spacebar, Key.Enter -> {
+                        if (!state.revealed) vm.reveal() else vm.grade(state.suggested ?: Rating.Good)
+                        true
+                    }
+                    Key.One -> {
+                        vm.grade(Rating.Again)
+                        true
+                    }
+                    Key.Two -> {
+                        vm.grade(Rating.Hard)
+                        true
+                    }
+                    Key.Three -> {
+                        vm.grade(Rating.Good)
+                        true
+                    }
+                    Key.Four -> {
+                        vm.grade(Rating.Easy)
+                        true
+                    }
+                    Key.U -> {
+                        vm.undo()
+                        true
+                    }
+                    Key.S -> {
+                        vm.suspendCurrent()
+                        true
+                    }
+                    Key.B -> {
+                        vm.buryCurrent()
+                        true
+                    }
+                    Key.E -> {
+                        state.view?.let { onEdit(it.card.noteId) }
+                        true
+                    }
+                    Key.Escape -> {
+                        onExit()
+                        true
+                    }
+                    else -> false
+                }
+            },
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            ReviewTopBar(state, compact, onExit, onMode = vm::setMode)
+            when {
+                state.loading -> Box(Modifier.fillMaxSize())
+                state.finished -> FinishedView(state, onExit, onUndo = vm::undo)
+                else ->
+                    Box(Modifier.fillMaxSize()) {
+                        Column(
+                            Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = if (compact) 16.dp else 32.dp, vertical = if (compact) 12.dp else 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Column(Modifier.widthIn(max = 760.dp).fillMaxWidth()) {
+                                CardStack(
+                                    state = state,
+                                    compact = compact,
+                                    onReveal = vm::reveal,
+                                    onSwipe = vm::grade,
+                                    onTyped = vm::setTyped,
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                if (!state.revealed) {
+                                    MnemoButton(
+                                        if (state.mode == ReviewMode.Type) "Check answer" else "Show answer",
+                                        onClick = vm::reveal,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        height = 60.dp,
+                                        primary = false,
+                                        kbd = if (isMobilePlatform) null else "Space",
+                                    )
+                                } else {
+                                    GradeBar(state = state, onGrade = vm::grade)
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                ActionsRow(state, compact, onUndo = vm::undo, onEdit = {
+                                    state.view?.let { onEdit(it.card.noteId) }
+                                }, onSuspend = vm::suspendCurrent, onBury = vm::buryCurrent)
+                                Spacer(Modifier.height(24.dp))
+                            }
+                        }
+                        state.toast?.let { Toast(it, Modifier.align(Alignment.BottomCenter).padding(24.dp)) }
+                    }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewTopBar(
+    state: ReviewUiState,
+    compact: Boolean,
+    onExit: () -> Unit,
+    onMode: (ReviewMode) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().background(MnemoColors.surface)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconActionButton(MnemoIcons.Close, "End session", onClick = onExit)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(state.deckName, style = MaterialTheme.typography.titleSmall, color = MnemoColors.text)
+                Text("${state.done} of ${state.total}", style = MaterialTheme.typography.labelMedium, color = MnemoColors.text2)
+            }
+            Segmented(
+                options = listOf("Classic", "Type", "Speak"),
+                selected = state.mode.ordinal,
+                onSelect = { onMode(ReviewMode.entries[it]) },
+                enabledMask = listOf(true, true, false),
+                modifier = Modifier.width(if (compact) 200.dp else 240.dp),
+            )
+        }
+        Box(Modifier.fillMaxWidth().height(4.dp).background(MnemoColors.surface3)) {
+            Box(Modifier.fillMaxWidth(state.progress).height(4.dp).background(MnemoColors.coral))
+        }
+    }
+}
+
+@Composable
+private fun CardStack(
+    state: ReviewUiState,
+    compact: Boolean,
+    onReveal: () -> Unit,
+    onSwipe: (Rating) -> Unit,
+    onTyped: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val offsetX = remember { Animatable(0f) }
+    val view = state.view ?: return
+    val rendered = state.rendered
+
+    Box(Modifier.fillMaxWidth()) {
+        // Deck of cards behind (Design C); they take the front card's size.
+        Box(
+            Modifier
+                .matchParentSize()
+                .padding(
+                    top = 14.dp,
+                    start = 10.dp,
+                    end = 10.dp,
+                ).rotate(2f)
+                .clip(RoundedCornerShape(32.dp))
+                .background(MnemoColors.lime.copy(alpha = 0.35f)),
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .padding(
+                    top = 8.dp,
+                    start = 4.dp,
+                    end = 4.dp,
+                ).rotate(-2f)
+                .clip(RoundedCornerShape(32.dp))
+                .background(MnemoColors.lavender.copy(alpha = 0.35f)),
+        )
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = if (compact) 360.dp else 300.dp)
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .pointerInput(view.card.id, state.revealed) {
+                    if (!state.revealed) return@pointerInput
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            val x = offsetX.value
+                            scope.launch {
+                                when {
+                                    x > 140 -> {
+                                        offsetX.animateTo(900f, tween(180))
+                                        onSwipe(Rating.Good)
+                                        offsetX.snapTo(0f)
+                                    }
+                                    x < -140 -> {
+                                        offsetX.animateTo(-900f, tween(180))
+                                        onSwipe(Rating.Again)
+                                        offsetX.snapTo(0f)
+                                    }
+                                    else -> offsetX.animateTo(0f)
+                                }
+                            }
+                        },
+                        onHorizontalDrag = { _, dragAmount -> scope.launch { offsetX.snapTo(offsetX.value + dragAmount) } },
+                    )
+                }.clip(RoundedCornerShape(32.dp))
+                .background(MnemoColors.surface)
+                .clickable(enabled = !state.revealed && state.mode != ReviewMode.Type, role = Role.Button, onClick = onReveal)
+                .padding(if (compact) 22.dp else 32.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatePill(view.card.state, view.card.lapses)
+                Text(view.noteKind.displayName, style = MaterialTheme.typography.labelMedium, color = MnemoColors.text3)
+                Spacer(Modifier.weight(1f))
+                if (view.card.state != CardState.New) {
+                    Text(
+                        "recall ${(state.retrievability * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MnemoColors.text3,
+                    )
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            MarkdownText(rendered?.question.orEmpty())
+
+            if (state.mode == ReviewMode.Type && rendered?.expected != null) {
+                Spacer(Modifier.height(18.dp))
+                if (!state.revealed) {
+                    MnemoTextField(
+                        value = state.typed,
+                        onValueChange = onTyped,
+                        placeholder = "Type your answer, then Enter",
+                        singleLine = true,
+                        onSubmit = onReveal,
+                    )
+                } else {
+                    val ok = state.verdict == AnswerMatcher.Verdict.Correct
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (ok) MnemoColors.gradeGoodBg else MnemoColors.gradeAgainBg)
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            if (ok) MnemoIcons.Check else MnemoIcons.Close,
+                            contentDescription = null,
+                            tint = if (ok) MnemoColors.gradeGood else MnemoColors.gradeAgain,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                if (ok) "Correct" else "Not quite",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (ok) MnemoColors.gradeGood else MnemoColors.gradeAgain,
+                            )
+                            Text(
+                                "You typed: ${state.typed.ifBlank { "—" }}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MnemoColors.text2,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (state.revealed) {
+                Spacer(Modifier.height(20.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(MnemoColors.outline))
+                Spacer(Modifier.height(20.dp))
+                MarkdownText(rendered?.answer.orEmpty())
+                if (view.tags.isNotEmpty()) {
+                    Spacer(Modifier.height(16.dp))
+                    Text(view.tags.joinToString("  ") { "#$it" }, style = MaterialTheme.typography.labelMedium, color = MnemoColors.text3)
+                }
+            } else if (compact) {
+                Spacer(Modifier.height(28.dp))
+                Text(
+                    "Tap to reveal",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MnemoColors.text3,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+            }
+        }
+    }
+    if (compact && state.revealed) {
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("← Again", style = MaterialTheme.typography.labelMedium, color = MnemoColors.gradeAgain)
+            Text("swipe the card", style = MaterialTheme.typography.labelMedium, color = MnemoColors.text3)
+            Text("Good →", style = MaterialTheme.typography.labelMedium, color = MnemoColors.gradeGood)
+        }
+    }
+}
+
+@Composable
+private fun StatePill(
+    state: CardState,
+    lapses: Int,
+) {
+    val (label, color, bg) =
+        when {
+            lapses >= 8 -> Triple("Leech", MnemoColors.danger, MnemoColors.gradeAgainBg)
+            state == CardState.New -> Triple("New", MnemoColors.stateNew, MnemoColors.gradeEasyBg)
+            state == CardState.Learning -> Triple("Learning", MnemoColors.stateLearning, MnemoColors.gradeHardBg)
+            state == CardState.Relearning -> Triple("Relearning", MnemoColors.stateLearning, MnemoColors.gradeHardBg)
+            else -> Triple("Review", MnemoColors.stateReview, MnemoColors.gradeGoodBg)
+        }
+    Box(Modifier.clip(RoundedCornerShape(999.dp)).background(bg).padding(horizontal = 10.dp, vertical = 3.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = color)
+    }
+}
+
+@Composable
+private fun GradeBar(
+    state: ReviewUiState,
+    onGrade: (Rating) -> Unit,
+) {
+    Column {
+        if (state.suggested != null) {
+            Text(
+                "Suggested: ${state.suggested.label} · Enter accepts, 1–4 overrides",
+                style = MaterialTheme.typography.labelMedium,
+                color = MnemoColors.text2,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Rating.entries.forEach { r ->
+                val (fg, bg) =
+                    when (r) {
+                        Rating.Again -> MnemoColors.gradeAgain to MnemoColors.gradeAgainBg
+                        Rating.Hard -> MnemoColors.gradeHard to MnemoColors.gradeHardBg
+                        Rating.Good -> MnemoColors.gradeGood to MnemoColors.gradeGoodBg
+                        Rating.Easy -> MnemoColors.gradeEasy to MnemoColors.gradeEasyBg
+                    }
+                val suggested = state.suggested == r
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .height(80.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(bg)
+                        .then(if (suggested) Modifier.padding(0.dp) else Modifier)
+                        .clickable(role = Role.Button) { onGrade(r) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(r.label, style = MaterialTheme.typography.titleMedium, color = fg)
+                    Text(
+                        state.previews[r]?.intervalLabel ?: "",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = fg.copy(alpha = 0.85f),
+                    )
+                    if (!isMobilePlatform) {
+                        Spacer(Modifier.height(2.dp))
+                        Kbd(if (suggested) "⏎ / ${r.key}" else r.key)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionsRow(
+    state: ReviewUiState,
+    compact: Boolean,
+    onUndo: () -> Unit,
+    onEdit: () -> Unit,
+    onSuspend: () -> Unit,
+    onBury: () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        MnemoButton(
+            "Undo",
+            onClick = onUndo,
+            icon = MnemoIcons.Undo,
+            enabled = state.canUndo,
+            kbd = if (compact) null else "U",
+            height = 40.dp,
+        )
+        MnemoButton("Edit", onClick = onEdit, icon = MnemoIcons.Edit, kbd = if (compact) null else "E", height = 40.dp)
+        MnemoButton("Suspend", onClick = onSuspend, icon = MnemoIcons.Pause, kbd = if (compact) null else "S", height = 40.dp)
+        MnemoButton("Bury", onClick = onBury, icon = MnemoIcons.Clock, kbd = if (compact) null else "B", height = 40.dp)
+        Spacer(Modifier.weight(1f))
+        state.view?.card?.let { c ->
+            if (!compact && c.stability != null) {
+                Text(
+                    "S ${fmt(c.stability)} d · D ${fmt(c.difficulty ?: 0.0)} · R ${(state.retrievability * 100).roundToInt()}%",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MnemoColors.text3,
+                )
+            }
+        }
+    }
+}
+
+private fun fmt(d: Double): String = ((d * 10).roundToInt() / 10.0).toString()
+
+@Composable
+private fun FinishedView(
+    state: ReviewUiState,
+    onExit: () -> Unit,
+    onUndo: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(Modifier.size(72.dp).clip(RoundedCornerShape(36.dp)).background(MnemoColors.lime), contentAlignment = Alignment.Center) {
+            Icon(MnemoIcons.Check, contentDescription = null, tint = MnemoColors.onLime, modifier = Modifier.size(32.dp))
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(
+            if (state.total == 0) "Nothing due" else "Session done",
+            style = MaterialTheme.typography.displaySmall,
+            color = MnemoColors.text,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            if (state.total ==
+                0
+            ) {
+                "Come back later, or add new cards to ${state.deckName}."
+            } else {
+                "${state.done} reviews · ${state.sessionCorrect} remembered · ${state.sessionAgain} again"
+            },
+            style = MaterialTheme.typography.bodyLarge,
+            color = MnemoColors.text2,
+        )
+        Spacer(Modifier.height(24.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MnemoButton("Back", onClick = onExit, primary = true, height = 48.dp)
+            if (state.canUndo) MnemoButton("Undo last", onClick = onUndo, icon = MnemoIcons.Undo, height = 48.dp)
+        }
+    }
+}
+
+@Composable
+private fun Toast(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.clip(RoundedCornerShape(12.dp)).background(MnemoColors.surface3).padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(text, style = MaterialTheme.typography.labelLarge, color = MnemoColors.text)
+    }
+}

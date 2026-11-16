@@ -1,0 +1,39 @@
+CREATE TABLE deck (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    parent_id INTEGER REFERENCES deck(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    settings_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX deck_parent ON deck(parent_id);
+
+selectAll:
+SELECT * FROM deck ORDER BY name;
+
+selectById:
+SELECT * FROM deck WHERE id = ?;
+
+selectChildren:
+SELECT * FROM deck WHERE parent_id = ? ORDER BY name;
+
+selectByName:
+SELECT * FROM deck WHERE name = ? AND ((parent_id IS NULL AND :parentId IS NULL) OR parent_id = :parentId);
+
+insert:
+INSERT INTO deck(parent_id, name, settings_json, created_at) VALUES (?, ?, ?, ?);
+
+lastInsertId:
+SELECT last_insert_rowid();
+
+rename:
+UPDATE deck SET name = ? WHERE id = ?;
+
+updateSettings:
+UPDATE deck SET settings_json = ? WHERE id = ?;
+
+delete:
+DELETE FROM deck WHERE id = ?;
+
+count:
+SELECT count(*) FROM deck;

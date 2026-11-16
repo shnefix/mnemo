@@ -1,0 +1,49 @@
+CREATE TABLE note (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    deck_id INTEGER NOT NULL REFERENCES deck(id) ON DELETE CASCADE,
+    note_type_id INTEGER NOT NULL REFERENCES note_type(id),
+    fields_json TEXT NOT NULL,   -- {"Front":"...","Back":"..."}
+    tags TEXT NOT NULL DEFAULT '', -- space separated, each tag wrapped: " a b "
+    source_id INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX note_deck ON note(deck_id);
+
+selectById:
+SELECT * FROM note WHERE id = ?;
+
+selectByDeck:
+SELECT * FROM note WHERE deck_id = ? ORDER BY created_at DESC;
+
+selectAll:
+SELECT * FROM note ORDER BY created_at DESC;
+
+insert:
+INSERT INTO note(deck_id, note_type_id, fields_json, tags, source_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+lastInsertId:
+SELECT last_insert_rowid();
+
+update:
+UPDATE note SET deck_id = ?, fields_json = ?, tags = ?, updated_at = ? WHERE id = ?;
+
+updateTags:
+UPDATE note SET tags = ?, updated_at = ? WHERE id = ?;
+
+moveToDeck:
+UPDATE note SET deck_id = ?, updated_at = ? WHERE id = ?;
+
+delete:
+DELETE FROM note WHERE id = ?;
+
+countAll:
+SELECT count(*) FROM note;
+
+countByDeck:
+SELECT count(*) FROM note WHERE deck_id = ?;
+
+allTags:
+SELECT DISTINCT tags FROM note WHERE tags != '';
