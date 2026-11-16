@@ -197,8 +197,12 @@ class OnDeviceDesignAuditTest {
             rule.waitUntil(15_000) { exists(hasText(deck)) }
             lint("11-decks-with-data")
 
-            // Deck settings via the row menu.
-            rule.onAllNodes(hasContentDescription("Deck menu")).onFirst().performClick()
+            // Deck settings via the menu on this deck's row (the first composed row may be scrolled out of view).
+            val row = rule.onNode(hasText(deck)).fetchSemanticsNode().boundsInRoot
+            val menus = rule.onAllNodes(hasContentDescription("Deck menu"))
+            val onRow = menus.fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.top <= row.bottom && it.boundsInRoot.bottom >= row.top }
+            check(onRow >= 0) { "No menu button on the row of $deck" }
+            menus[onRow].performClick()
             settle()
             rule.onNodeWithText("Deck settings").performClick()
             lint("12-deck-settings")
