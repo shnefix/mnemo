@@ -9,7 +9,10 @@ import kotlinx.coroutines.runBlocking
 
 /** The process-wide [AppGraph], shared by the activity and the reminder receiver. */
 object GraphHolder {
-    private var graph: AppGraph? = null
+    @Volatile private var graph: AppGraph? = null
+
+    /** The graph if it is already built, without blocking. */
+    fun peek(): AppGraph? = graph
 
     @Synchronized
     fun get(context: Context): AppGraph =

@@ -33,8 +33,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,6 +67,7 @@ import app.mnemo.domain.model.ReviewMode
 import app.mnemo.domain.review.AnswerMatcher
 import app.mnemo.platform.Speech
 import app.mnemo.platform.isMobilePlatform
+import app.mnemo.platform.shareText
 import app.mnemo.ui.components.IconActionButton
 import app.mnemo.ui.components.Kbd
 import app.mnemo.ui.components.MarkdownText
@@ -85,6 +88,7 @@ fun ReviewScreen(
     weak: Boolean = false,
     onExit: () -> Unit,
     onEdit: (noteId: Long) -> Unit,
+    onSearch: () -> Unit = {},
 ) {
     val graph = LocalAppGraph.current
     val vm: ReviewViewModel = viewModel(key = "review-$deckId-$weak") { ReviewViewModel(graph, deckId, weak) }
@@ -161,7 +165,7 @@ fun ReviewScreen(
             },
     ) {
         Column(Modifier.fillMaxSize()) {
-            ReviewTopBar(state, compact, onExit, onMode = vm::setMode)
+            ReviewTopBar(state, compact, onExit, onMode = vm::setMode, onSearch = onSearch)
             when {
                 state.loading -> Box(Modifier.fillMaxSize())
                 state.finished -> FinishedView(state, onExit, onUndo = vm::undo)
@@ -215,6 +219,7 @@ private fun ReviewTopBar(
     compact: Boolean,
     onExit: () -> Unit,
     onMode: (ReviewMode) -> Unit,
+    onSearch: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().background(MnemoColors.surface)) {
         Row(
@@ -233,7 +238,9 @@ private fun ReviewTopBar(
                 )
                 Text("${state.done} of ${state.total}", style = MaterialTheme.typography.labelMedium, color = MnemoColors.text2)
             }
+            IconActionButton(MnemoIcons.Search, "Search cards", onClick = onSearch)
             if (!compact) {
+                Spacer(Modifier.width(12.dp))
                 ModeSwitch(state, onMode, Modifier.width(240.dp))
             }
         }
@@ -274,6 +281,7 @@ private fun CardStack(
     val offsetX = remember { Animatable(0f) }
     val view = state.view ?: return
     val rendered = state.rendered
+    var copied by remember(view.card.id) { mutableStateOf(false) }
 
     Box(Modifier.fillMaxWidth()) {
         // Deck of cards behind (Design C); they take the front card's size.
@@ -337,6 +345,37 @@ private fun CardStack(
                 StatePill(view.card.state, view.card.lapses, state.leechThreshold)
                 Text(view.noteKind.displayName, style = MaterialTheme.typography.labelMedium, color = MnemoColors.text3)
                 Spacer(Modifier.weight(1f))
+                @Suppress("DEPRECATION")
+                val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                // Before the reveal: the question. After it: question and answer together.
+                val cardText =
+                    if (state.revealed) {
+                        "${plainCardText(rendered?.question)}\n\n${plainCardText(rendered?.answer)}"
+                    } else {
+                        plainCardText(rendered?.question)
+                    }
+                IconActionButton(
+                    MnemoIcons.Copy,
+                    if (state.revealed) "Copy question and answer" else "Copy question",
+                    onClick = {
+                        clipboard.setText(
+                            androidx.compose.ui.text
+                                .AnnotatedString(cardText),
+                        )
+                        copied = true
+                    },
+                    size = 30.dp,
+                    tint = if (copied) MnemoColors.text else MnemoColors.text3,
+                )
+                if (isMobilePlatform) {
+                    IconActionButton(
+                        MnemoIcons.Share,
+                        "Share card",
+                        onClick = { shareText(cardText) },
+                        size = 30.dp,
+                        tint = MnemoColors.text3,
+                    )
+                }
                 if (view.card.state != CardState.New) {
                     Text(
                         "recall ${(state.retrievability * 100).roundToInt()}%",
@@ -643,3 +682,12 @@ private fun Toast(
         Text(text, style = MaterialTheme.typography.labelLarge, color = MnemoColors.text)
     }
 }
+
+/** Card text without Markdown images or `[sound:…]` tags, for copying and sharing. */
+private fun plainCardText(text: String?): String =
+    text
+        .orEmpty()
+        .replace(Regex("""!\[[^\]]*\]\([^)]+\)"""), "")
+        .replace(Regex("""\[sound:[^\]]+\]"""), "")
+        .replace(Regex("""<[^>]+>"""), "")
+        .trim()

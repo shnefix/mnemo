@@ -1,5 +1,8 @@
 package app.mnemo
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -41,6 +44,7 @@ val LocalAppGraph = staticCompositionLocalOf<AppGraph> { error("AppGraph not pro
 fun App(
     graph: AppGraph,
     themeState: ThemeState? = null,
+    reviewRequests: Int = 0,
 ) {
     CompositionLocalProvider(LocalAppGraph provides graph) {
         MnemoTheme(themeState = themeState) {
@@ -78,6 +82,11 @@ fun App(
                     }
                 }
 
+                // The home-screen widget's "Start review" (each tap bumps the counter).
+                LaunchedEffect(reviewRequests) {
+                    if (reviewRequests > 0) nav.navigate(Route.Review()) { launchSingleTop = true }
+                }
+
                 AdaptiveScaffold(
                     current = currentSection,
                     showChrome = !isFocus,
@@ -91,7 +100,16 @@ fun App(
                     onCreate = { nav.navigate(Route.Editor()) },
                     onSettings = { nav.navigate(Route.Settings) },
                 ) { padding ->
-                    NavHost(navController = nav, startDestination = Route.Today, modifier = Modifier.padding(padding)) {
+                    NavHost(
+                        navController = nav,
+                        startDestination = Route.Today,
+                        modifier = Modifier.padding(padding),
+                        // The default 700ms crossfade made every screen switch feel sluggish.
+                        enterTransition = { fadeIn(tween(120)) },
+                        exitTransition = { fadeOut(tween(90)) },
+                        popEnterTransition = { fadeIn(tween(120)) },
+                        popExitTransition = { fadeOut(tween(90)) },
+                    ) {
                         composable<Route.Today> {
                             TodayScreen(
                                 onReview = { nav.navigate(Route.Review(it)) },
@@ -130,6 +148,7 @@ fun App(
                                 weak = route.weak,
                                 onExit = { if (!nav.popBackStack()) goHome() },
                                 onEdit = { nav.navigate(Route.Editor(noteId = it)) },
+                                onSearch = { nav.navigate(Route.Browse) },
                             )
                         }
                         composable<Route.Editor> { entry ->

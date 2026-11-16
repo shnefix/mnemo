@@ -380,4 +380,33 @@ object MnemoIcons {
             arcTo(5f, 5f, 0f, false, true, 16.5f, 15.5f)
         }
     }
+
+    val Copy: ImageVector by lazy {
+        stroke("Copy") {
+            moveTo(9f, 9f)
+            lineTo(20f, 9f)
+            lineTo(20f, 20f)
+            lineTo(9f, 20f)
+            close()
+            moveTo(5f, 15f)
+            lineTo(4f, 15f)
+            lineTo(4f, 4f)
+            lineTo(15f, 4f)
+            lineTo(15f, 5f)
+        }
+    }
+
+    val Share: ImageVector by lazy {
+        stroke("Share") {
+            moveTo(12f, 3f)
+            lineTo(12f, 15f)
+            moveTo(7f, 8f)
+            lineTo(12f, 3f)
+            lineTo(17f, 8f)
+            moveTo(5f, 13f)
+            lineTo(5f, 20f)
+            lineTo(19f, 20f)
+            lineTo(19f, 13f)
+        }
+    }
 }

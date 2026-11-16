@@ -29,8 +29,13 @@ class ReminderReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val due = Reminder.dueTotal(GraphHolder.get(appContext))
-                if (due > 0) ReminderScheduler.notify(appContext, Reminder.message(due))
+                val graph = GraphHolder.get(appContext)
+                val due = Reminder.dueTotal(graph)
+                if (due > 0) {
+                    val (streak, reviewedToday) = Reminder.streakInfo(graph)
+                    ReminderScheduler.notify(appContext, Reminder.message(due, streak, reviewedToday))
+                }
+                DueWidget.updateAll(appContext)
             } catch (_: Exception) {
                 // A failed count must not stop tomorrow's reminder.
             } finally {

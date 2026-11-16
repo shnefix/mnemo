@@ -19,6 +19,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <receiver
+            android:name=".DueWidget"
+            android:exported="false"
+            android:label="Mnemo · cards due">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_due_info" />
+        </receiver>
         <!-- Daily "cards due" reminder: fired by AlarmManager, re-armed after boot. -->
         <receiver
             android:name=".ReminderReceiver"

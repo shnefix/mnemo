@@ -37,6 +37,7 @@ import app.mnemo.domain.reminder.Reminder
 import app.mnemo.domain.stats.DayStart
 import app.mnemo.platform.ReminderScheduler
 import app.mnemo.platform.appDataDir
+import app.mnemo.platform.refreshWidgets
 import app.mnemo.platform.rememberFilePicker
 import app.mnemo.platform.rememberFolderPicker
 import app.mnemo.platform.rememberNotificationPermissionRequest
@@ -54,6 +55,7 @@ import app.mnemo.ui.nav.WindowSize
 import app.mnemo.ui.theme.LocalThemeMode
 import app.mnemo.ui.theme.MnemoColors
 import app.mnemo.ui.theme.ThemeMode
+import app.mnemo.ui.theme.ThemeState
 import kotlinx.coroutines.launch
 
 @Composable
@@ -185,6 +187,22 @@ fun SettingsScreen() {
             }
         }
 
+    val pickSync =
+        rememberFilePicker(listOf("json")) { file ->
+            if (file == null) {
+                message = "No file chosen"
+                return@rememberFilePicker
+            }
+            busy = true
+            scope.launch {
+                val n = runCatching { JsonBackup.merge(graph, file.text) }
+                message = n.fold({ "Synced: $it notes added or updated" }, { "Sync failed: ${it.message}" })
+                busy = false
+                refreshWidgets()
+                refresh()
+            }
+        }
+
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = if (compact) 20.dp else 40.dp, vertical = 28.dp),
     ) {
@@ -198,6 +216,14 @@ fun SettingsScreen() {
                     options = listOf("OLED dark", "Light", "System"),
                     selected = theme.mode.ordinal,
                     onSelect = { theme.set(ThemeMode.entries[it]) },
+                )
+                Spacer(Modifier.height(14.dp))
+                Eyebrow("Text size")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = ThemeState.TEXT_SIZE_LABELS,
+                    selected = theme.textSize,
+                    onSelect = { theme.changeTextSize(it) },
                 )
             }
             Panel {
@@ -366,6 +392,27 @@ fun SettingsScreen() {
                         }
                     })
                     MnemoButton("Restore from JSON…", onClick = pickJson)
+                }
+                Spacer(Modifier.height(16.dp))
+                Eyebrow("Sync with another phone")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Save a sync file to Google Drive (or any shared folder) on one phone, then choose it on the other. " +
+                        "Cards both phones have are merged, not duplicated: the latest edit and the latest review win, " +
+                        "and review history is combined. " +
+                        "Do it in both directions to keep the two in step.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MnemoColors.text2,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MnemoButton("Save sync file…", icon = MnemoIcons.Export, enabled = !busy, onClick = {
+                        scope.launch {
+                            val path = saveTextFile("mnemo-sync.json", JsonBackup.export(graph))
+                            message = if (path != null) "Sync file saved: $path" else "Cancelled"
+                        }
+                    })
+                    MnemoButton("Sync from file…", icon = MnemoIcons.Import, enabled = !busy, onClick = pickSync)
                 }
                 Spacer(Modifier.height(16.dp))
                 Eyebrow("Automatic backups")

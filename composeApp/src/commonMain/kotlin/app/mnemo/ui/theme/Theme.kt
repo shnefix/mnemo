@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import app.mnemo.platform.Prefs
 
@@ -32,12 +34,26 @@ class ThemeState(
     var mode: ThemeMode by mutableStateOf(initial)
         private set
 
+    /** Index into [TEXT_SIZES]: how much larger than the system setting text is drawn. */
+    var textSize: Int by mutableStateOf(
+        Prefs.get(Prefs.TEXT_SIZE)?.toIntOrNull()?.takeIf { it in TEXT_SIZES.indices } ?: 1,
+    )
+        private set
+
+    fun changeTextSize(index: Int) {
+        textSize = index
+        Prefs.set(Prefs.TEXT_SIZE, index.toString())
+    }
+
     fun set(mode: ThemeMode) {
         this.mode = mode
         Prefs.set(Prefs.THEME, mode.name)
     }
 
     companion object {
+        val TEXT_SIZES = listOf(0.9f, 1f, 1.15f, 1.3f)
+        val TEXT_SIZE_LABELS = listOf("Small", "Normal", "Large", "Larger")
+
         fun fromPrefs(): ThemeState =
             ThemeState(runCatching { ThemeMode.valueOf(Prefs.get(Prefs.THEME) ?: "Dark") }.getOrDefault(ThemeMode.Dark))
     }
@@ -100,7 +116,9 @@ fun MnemoTheme(
         }
     val palette = if (dark) OledPalette else LightPalette
     SideEffect { if (MnemoColors.palette !== palette) MnemoColors.palette = palette }
-    CompositionLocalProvider(LocalThemeMode provides state) {
+    val density = LocalDensity.current
+    val scaled = Density(density.density, density.fontScale * ThemeState.TEXT_SIZES[state.textSize])
+    CompositionLocalProvider(LocalThemeMode provides state, LocalDensity provides scaled) {
         MaterialTheme(
             colorScheme = scheme(palette),
             typography = mnemoTypography(),
