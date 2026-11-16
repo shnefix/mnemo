@@ -28,6 +28,7 @@ import app.mnemo.data.io.AutoBackup
 import app.mnemo.data.io.CsvImporter
 import app.mnemo.data.io.JsonBackup
 import app.mnemo.domain.model.Deck
+import app.mnemo.domain.stats.DayStart
 import app.mnemo.platform.appDataDir
 import app.mnemo.platform.rememberFilePicker
 import app.mnemo.platform.saveTextFile
@@ -59,6 +60,7 @@ fun SettingsScreen() {
     var busy by remember { mutableStateOf(false) }
     var counts by remember { mutableStateOf("") }
     var backups by remember { mutableStateOf(AutoBackup.list()) }
+    var dayStart by remember { mutableStateOf(DayStart.hour) }
 
     suspend fun refresh() {
         decks = graph.decks.all()
@@ -144,6 +146,26 @@ fun SettingsScreen() {
                     options = listOf("OLED dark", "Light", "System"),
                     selected = theme.mode.ordinal,
                     onSelect = { theme.set(ThemeMode.entries[it]) },
+                )
+            }
+            Panel {
+                Eyebrow("Study day")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "When the next day starts. Reviews before this hour count toward the previous day, so a late session does not split your streak or reset the daily limits at midnight.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MnemoColors.text2,
+                )
+                Spacer(Modifier.height(12.dp))
+                MnemoSelect(
+                    label = "Next day starts at",
+                    options = (0..12).toList(),
+                    selected = dayStart,
+                    display = { "${it.toString().padStart(2, '0')}:00" },
+                    onSelect = {
+                        dayStart = it
+                        DayStart.hour = it
+                    },
                 )
             }
             Panel {

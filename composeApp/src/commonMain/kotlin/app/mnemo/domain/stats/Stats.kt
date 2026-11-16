@@ -2,6 +2,7 @@ package app.mnemo.domain.stats
 
 import app.mnemo.data.repo.DailyReviews
 import app.mnemo.domain.model.DAY_MS
+import app.mnemo.platform.Prefs
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -10,11 +11,31 @@ import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.ExperimentalTime
 
-/** Days as local calendar dates, so "today" follows the user's clock, not UTC. */
+/**
+ * The hour at which a new study day begins (Anki's "next day starts at").
+ * Reviews before this hour count toward the previous day, so a late-night
+ * session does not split across two days. Stored in prefs; default 4 am.
+ */
+object DayStart {
+    const val DEFAULT_HOUR = 4
+    private var cached: Int? = null
+
+    var hour: Int
+        get() = cached ?: (Prefs.get(Prefs.DAY_START_HOUR)?.toIntOrNull()?.coerceIn(0, 12) ?: DEFAULT_HOUR).also { cached = it }
+        set(value) {
+            val h = value.coerceIn(0, 12)
+            cached = h
+            Prefs.set(Prefs.DAY_START_HOUR, h.toString())
+        }
+}
+
+private const val HOUR_MS = 60 * 60 * 1000L
+
+/** Study-day date of [epochMillis]: the local calendar date, shifted so the day rolls over at [DayStart.hour]. */
 @OptIn(ExperimentalTime::class)
 fun localDate(epochMillis: Long): LocalDate =
     kotlin.time.Instant
-        .fromEpochMilliseconds(epochMillis)
+        .fromEpochMilliseconds(epochMillis - DayStart.hour * HOUR_MS)
         .toLocalDateTime(TimeZone.currentSystemDefault())
         .date
 
@@ -25,10 +46,10 @@ fun localDate(epochMillis: Long): LocalDate =
  */
 fun startOfLocalDay(epochMillis: Long): Long = startOfLocalDay(localDate(epochMillis))
 
-/** Start of [date] in the local time zone (DST-safe, unlike adding 24h). */
+/** Start of the study day [date] in the local time zone: [DayStart.hour] o'clock (DST-safe, unlike adding 24h). */
 @OptIn(ExperimentalTime::class)
 fun startOfLocalDay(date: LocalDate): Long =
-    LocalDateTime(date, LocalTime(0, 0)).toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
+    LocalDateTime(date, LocalTime(DayStart.hour, 0)).toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
 
 /** Start of the local day after the one containing [epochMillis]: when a buried card comes back. */
 fun nextLocalDayStart(epochMillis: Long): Long = startOfLocalDay(localDate(epochMillis).plusDays(1))
