@@ -90,4 +90,36 @@ class AnswerMatcherTest {
         assertEquals(AnswerMatcher.Verdict.Correct, AnswerMatcher.check("fahrrad", "Fahrräd"))
         assertEquals(AnswerMatcher.Verdict.Wrong, AnswerMatcher.check("die Zeit", "die Zeitung"))
     }
+
+    @Test
+    fun unicodeFoldingTreatsEquivalentSpellingsAsCorrect() {
+        assertEquals(AnswerMatcher.Verdict.Correct, AnswerMatcher.check("Strasse", "Straße"))
+        assertEquals(AnswerMatcher.Verdict.Correct, AnswerMatcher.check("garcon", "garçon"))
+        // Decomposed (e + combining acute) equals precomposed é.
+        assertEquals(AnswerMatcher.Verdict.Correct, AnswerMatcher.check("cafe\u0301", "café"))
+    }
+
+    @Test
+    fun oneTypoIsCloseButNotForShortWords() {
+        val r = AnswerMatcher.compare("Zeitnug", "Zeitung")
+        assertEquals(AnswerMatcher.Verdict.Close, r.verdict)
+        assertEquals(1, r.distance, "a swap of two letters is one edit")
+        assertEquals(AnswerMatcher.Verdict.Close, AnswerMatcher.check("recieve", "receive"))
+        assertEquals(AnswerMatcher.Verdict.Wrong, AnswerMatcher.check("dog", "dot"))
+        assertEquals(AnswerMatcher.Verdict.Wrong, AnswerMatcher.check("", "Zeitung"))
+    }
+
+    @Test
+    fun diffMarksMissingAndExtraCharacters() {
+        val d = AnswerMatcher.diff("Zeitnug", "Zeitung")
+        assertEquals("Zeitung", d.filter { it.kind != AnswerMatcher.Kind.Extra }.joinToString("") { it.text })
+        assertEquals("Zeitnug", d.filter { it.kind != AnswerMatcher.Kind.Missing }.joinToString("") { it.text })
+        assertEquals(setOf(AnswerMatcher.Kind.Same, AnswerMatcher.Kind.Missing, AnswerMatcher.Kind.Extra), d.map { it.kind }.toSet())
+        assertEquals("Zeit", d.first().text)
+        // Same segments show the expected spelling even when the typed letter only differs by an accent.
+        val accent = AnswerMatcher.diff("cafe", "café")
+        assertEquals(listOf(AnswerMatcher.Segment("café", AnswerMatcher.Kind.Same)), accent)
+        val wrong = AnswerMatcher.compare("", "ab")
+        assertEquals(listOf(AnswerMatcher.Segment("ab", AnswerMatcher.Kind.Missing)), wrong.diff)
+    }
 }

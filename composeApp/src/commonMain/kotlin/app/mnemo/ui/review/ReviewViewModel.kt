@@ -34,6 +34,8 @@ data class ReviewUiState(
     val mode: ReviewMode = ReviewMode.Classic,
     val typed: String = "",
     val verdict: AnswerMatcher.Verdict? = null,
+    /** Typed-answer comparison (Type mode, after reveal): verdict plus a character diff. */
+    val comparison: AnswerMatcher.Result? = null,
     val suggested: Rating? = null,
     val toast: String? = null,
     val retrievability: Double = 0.0,
@@ -115,6 +117,7 @@ class ReviewViewModel(
                 finished = false,
                 typed = "",
                 verdict = null,
+                comparison = null,
                 suggested = null,
                 retrievability = scheduler.retrievability(view.card, shownAt),
                 leechThreshold = deckSettings.leechThreshold,
@@ -126,14 +129,15 @@ class ReviewViewModel(
         val s = _state.value
         if (s.revealed || s.view == null) return
         if (s.mode == ReviewMode.Type && s.rendered?.expected != null) {
-            val verdict = AnswerMatcher.check(s.typed, s.rendered.expected)
+            val comparison = AnswerMatcher.compare(s.typed, s.rendered.expected)
             val fast = graph.clock.now() - shownAt < 6_000
             val suggested =
-                when (verdict) {
+                when (comparison.verdict) {
                     AnswerMatcher.Verdict.Correct -> if (fast) Rating.Easy else Rating.Good
+                    AnswerMatcher.Verdict.Close -> Rating.Hard
                     AnswerMatcher.Verdict.Wrong -> Rating.Again
                 }
-            _state.update { it.copy(revealed = true, verdict = verdict, suggested = suggested) }
+            _state.update { it.copy(revealed = true, verdict = comparison.verdict, comparison = comparison, suggested = suggested) }
         } else {
             _state.update { it.copy(revealed = true) }
         }

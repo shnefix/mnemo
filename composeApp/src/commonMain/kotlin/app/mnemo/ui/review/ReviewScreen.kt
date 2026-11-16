@@ -48,7 +48,13 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -367,35 +373,7 @@ private fun CardStack(
                         onSubmit = onReveal,
                     )
                 } else {
-                    val ok = state.verdict == AnswerMatcher.Verdict.Correct
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (ok) MnemoColors.gradeGoodBg else MnemoColors.gradeAgainBg)
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            if (ok) MnemoIcons.Check else MnemoIcons.Close,
-                            contentDescription = null,
-                            tint = if (ok) MnemoColors.gradeGood else MnemoColors.gradeAgain,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                if (ok) "Correct" else "Not quite",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (ok) MnemoColors.gradeGood else MnemoColors.gradeAgain,
-                            )
-                            Text(
-                                "You typed: ${state.typed.ifBlank { "—" }}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MnemoColors.text2,
-                            )
-                        }
-                    }
+                    TypedFeedback(state)
                 }
             }
 
@@ -447,6 +425,81 @@ private fun StatePill(
         Text(label, style = MaterialTheme.typography.labelMedium, color = color)
     }
 }
+
+/** Verdict banner for Type mode: correct / close / wrong, with a character diff against the expected answer. */
+@Composable
+private fun TypedFeedback(state: ReviewUiState) {
+    val verdict = state.verdict ?: return
+    val (title, fg, bg) =
+        when (verdict) {
+            AnswerMatcher.Verdict.Correct -> Triple("Correct", MnemoColors.gradeGood, MnemoColors.gradeGoodBg)
+            AnswerMatcher.Verdict.Close -> Triple("Close", MnemoColors.gradeHard, MnemoColors.gradeHardBg)
+            AnswerMatcher.Verdict.Wrong -> Triple("Not quite", MnemoColors.gradeAgain, MnemoColors.gradeAgainBg)
+        }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(bg)
+            .padding(14.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            if (verdict == AnswerMatcher.Verdict.Wrong) MnemoIcons.Close else MnemoIcons.Check,
+            contentDescription = null,
+            tint = fg,
+            modifier = Modifier.size(18.dp).padding(top = 1.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = fg)
+            val diff = state.comparison?.diff.orEmpty()
+            if (verdict == AnswerMatcher.Verdict.Correct || diff.isEmpty()) {
+                Text(
+                    "You typed: ${state.typed.ifBlank { "—" }}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MnemoColors.text2,
+                )
+            } else {
+                Spacer(Modifier.height(4.dp))
+                Text(diffText(diff), style = MaterialTheme.typography.bodyLarge, color = MnemoColors.text)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    buildString {
+                        if (diff.any { it.kind == AnswerMatcher.Kind.Missing }) append("underlined: missing")
+                        if (diff.any { it.kind == AnswerMatcher.Kind.Extra }) {
+                            if (isNotEmpty()) append(" · ")
+                            append("struck out: extra")
+                        }
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MnemoColors.text3,
+                )
+            }
+        }
+    }
+}
+
+/** Expected spelling in plain text; missing letters underlined in the Again colour, extra ones struck out. */
+@Composable
+private fun diffText(diff: List<AnswerMatcher.Segment>): AnnotatedString =
+    buildAnnotatedString {
+        diff.forEach { seg ->
+            when (seg.kind) {
+                AnswerMatcher.Kind.Same -> append(seg.text)
+                AnswerMatcher.Kind.Missing ->
+                    withStyle(
+                        SpanStyle(
+                            color = MnemoColors.gradeAgain,
+                            fontWeight = FontWeight.SemiBold,
+                            textDecoration = TextDecoration.Underline,
+                        ),
+                    ) { append(seg.text) }
+                AnswerMatcher.Kind.Extra ->
+                    withStyle(SpanStyle(color = MnemoColors.text3, textDecoration = TextDecoration.LineThrough)) { append(seg.text) }
+            }
+        }
+    }
 
 @Composable
 private fun GradeBar(
