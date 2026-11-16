@@ -36,6 +36,40 @@ actual fun rememberFilePicker(
     }
 }
 
+@Composable
+actual fun rememberFolderPicker(
+    extensions: List<String>,
+    onPicked: (PickedFolder?) -> Unit,
+): () -> Unit {
+    val scope = rememberCoroutineScope()
+    return {
+        scope.launch {
+            val dir =
+                withContext(Dispatchers.Swing) {
+                    val chooser = JFileChooser()
+                    chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                    chooser.dialogTitle = "Choose a folder of Markdown notes"
+                    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
+                }
+            val picked =
+                dir?.let { root ->
+                    withContext(Dispatchers.IO) {
+                        val files =
+                            root
+                                .walkTopDown()
+                                .onEnter { d -> d == root || !d.name.startsWith(".") }
+                                .filter { it.isFile && it.extension.lowercase() in extensions }
+                                .sortedBy { it.path }
+                                .map { f -> PickedTextFile(f.relativeTo(root).path.replace(File.separatorChar, '/'), f.readText()) }
+                                .toList()
+                        PickedFolder(root.name, files)
+                    }
+                }
+            onPicked(picked)
+        }
+    }
+}
+
 actual suspend fun saveTextFile(
     suggestedName: String,
     content: String,

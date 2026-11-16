@@ -47,3 +47,7 @@ SELECT count(*) FROM note WHERE deck_id = ?;
 
 allTags:
 SELECT DISTINCT tags FROM note WHERE tags != '';
+
+-- Importer keys (Markdown vault cards), for skipping what was imported before.
+sourceIds:
+SELECT source_id FROM note WHERE source_id IS NOT NULL;

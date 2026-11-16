@@ -11,6 +11,29 @@ class PickedFile(
     val text: String get() = bytes.decodeToString()
 }
 
+/** A text file found inside a picked folder, with its `/`-separated path relative to that folder. */
+class PickedTextFile(
+    val path: String,
+    val text: String,
+)
+
+class PickedFolder(
+    val name: String,
+    val files: List<PickedTextFile>,
+)
+
+/**
+ * Returns a function that opens the platform folder picker and reads every
+ * file below it whose extension is in [extensions] (hidden folders such as
+ * `.obsidian` are skipped); [onPicked] receives null when the user cancels.
+ * Must be called in composition.
+ */
+@Composable
+expect fun rememberFolderPicker(
+    extensions: List<String>,
+    onPicked: (PickedFolder?) -> Unit,
+): () -> Unit
+
 /**
  * Returns a function that opens the platform file picker; [onPicked] receives
  * the file, or null when the user cancels. Must be called in composition

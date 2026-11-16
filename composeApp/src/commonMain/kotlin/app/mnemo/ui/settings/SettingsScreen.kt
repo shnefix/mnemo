@@ -31,12 +31,14 @@ import app.mnemo.data.io.ApkgImporter
 import app.mnemo.data.io.AutoBackup
 import app.mnemo.data.io.CsvImporter
 import app.mnemo.data.io.JsonBackup
+import app.mnemo.data.io.MarkdownImporter
 import app.mnemo.domain.model.Deck
 import app.mnemo.domain.reminder.Reminder
 import app.mnemo.domain.stats.DayStart
 import app.mnemo.platform.ReminderScheduler
 import app.mnemo.platform.appDataDir
 import app.mnemo.platform.rememberFilePicker
+import app.mnemo.platform.rememberFolderPicker
 import app.mnemo.platform.rememberNotificationPermissionRequest
 import app.mnemo.platform.saveTextFile
 import app.mnemo.ui.components.Eyebrow
@@ -69,6 +71,7 @@ fun SettingsScreen() {
     var backups by remember { mutableStateOf(AutoBackup.list()) }
     var dayStart by remember { mutableStateOf(DayStart.hour) }
     var reminderHour by remember { mutableStateOf(Reminder.hour) }
+    var titleFallback by remember { mutableStateOf(false) }
     val requestNotifications =
         rememberNotificationPermissionRequest { granted ->
             if (granted) {
@@ -135,6 +138,37 @@ fun SettingsScreen() {
                 message = "No file chosen"
             } else {
                 runCsv(file.text)
+            }
+        }
+    val pickFolder =
+        rememberFolderPicker(listOf("md", "markdown")) { folder ->
+            val deck = importDeck
+            when {
+                folder == null -> message = "No folder chosen"
+                deck == null -> message = "Create a deck first."
+                folder.files.isEmpty() -> message = "No Markdown files in ${folder.name}"
+                else -> {
+                    busy = true
+                    message = "Importing ${folder.files.size} files from ${folder.name}…"
+                    scope.launch {
+                        val docs = folder.files.map { MarkdownImporter.Doc(it.path, it.text) }
+                        val result = runCatching { MarkdownImporter.import(graph, deck.id, docs, titleFallback = titleFallback) }
+                        message =
+                            result.fold(
+                                { r ->
+                                    if (r.notes == 0 && r.skipped == 0) {
+                                        "No question/answer sections found in ${folder.files.size} files"
+                                    } else {
+                                        "Imported ${r.notes} notes (${r.cards} cards) from ${r.files} files into ${r.decks} decks under ${deck.path}" +
+                                            if (r.skipped > 0) " · ${r.skipped} already imported" else ""
+                                    }
+                                },
+                                { "Import failed: ${it.message}" },
+                            )
+                        busy = false
+                        refresh()
+                    }
+                }
             }
         }
     val pickJson =
@@ -273,6 +307,45 @@ fun SettingsScreen() {
                 }, label = "…or paste CSV text", minLines = 4, placeholder = "der Hund,the dog,a1 noun")
                 Spacer(Modifier.height(8.dp))
                 MnemoButton("Import pasted text", enabled = pasted.isNotBlank(), onClick = { runCsv(pasted) })
+            }
+            Panel {
+                Eyebrow("Import a Markdown folder")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Obsidian-style notes: a “## Question” and “## Answer” section, “Q:” / “A:” lines, or a block split by a line " +
+                        "holding only “?”. Frontmatter tags carry over, subfolders become subdecks, and re-importing skips cards you already have.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MnemoColors.text2,
+                )
+                Spacer(Modifier.height(12.dp))
+                MnemoSelect(
+                    label = "Into deck",
+                    options = decks,
+                    selected = importDeck,
+                    display = { it.path },
+                    onSelect = { importDeck = it },
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = titleFallback,
+                        onCheckedChange = { titleFallback = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MnemoColors.onCoral, checkedTrackColor = MnemoColors.coral),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Also import notes without sections: title asks, body answers",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MnemoColors.text,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                MnemoButton(
+                    if (busy) "Importing…" else "Choose folder…",
+                    icon = MnemoIcons.Import,
+                    enabled = !busy,
+                    onClick = pickFolder,
+                )
             }
             Panel {
                 Eyebrow("Backup")
