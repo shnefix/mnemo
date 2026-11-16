@@ -8,10 +8,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.mnemo.LocalAppGraph
@@ -28,9 +32,12 @@ import app.mnemo.data.io.AutoBackup
 import app.mnemo.data.io.CsvImporter
 import app.mnemo.data.io.JsonBackup
 import app.mnemo.domain.model.Deck
+import app.mnemo.domain.reminder.Reminder
 import app.mnemo.domain.stats.DayStart
+import app.mnemo.platform.ReminderScheduler
 import app.mnemo.platform.appDataDir
 import app.mnemo.platform.rememberFilePicker
+import app.mnemo.platform.rememberNotificationPermissionRequest
 import app.mnemo.platform.saveTextFile
 import app.mnemo.ui.components.Eyebrow
 import app.mnemo.ui.components.MnemoButton
@@ -61,6 +68,16 @@ fun SettingsScreen() {
     var counts by remember { mutableStateOf("") }
     var backups by remember { mutableStateOf(AutoBackup.list()) }
     var dayStart by remember { mutableStateOf(DayStart.hour) }
+    var reminderHour by remember { mutableStateOf(Reminder.hour) }
+    val requestNotifications =
+        rememberNotificationPermissionRequest { granted ->
+            if (granted) {
+                reminderHour = Reminder.DEFAULT_HOUR
+                Reminder.hour = Reminder.DEFAULT_HOUR
+            } else {
+                message = "Notifications are blocked for Mnemo; allow them in the system settings to get a reminder."
+            }
+        }
 
     suspend fun refresh() {
         decks = graph.decks.all()
@@ -169,6 +186,53 @@ fun SettingsScreen() {
                 )
             }
             Panel {
+                Eyebrow("Daily reminder")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "One notification a day with how many cards are due. Nothing is sent on a day with nothing due.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MnemoColors.text2,
+                )
+                Spacer(Modifier.height(12.dp))
+                if (!ReminderScheduler.supported) {
+                    Text(
+                        "Reminders are available in the Android app.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MnemoColors.text3,
+                    )
+                } else {
+                    Row(Modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = reminderHour != null,
+                            onCheckedChange = { on ->
+                                if (on) {
+                                    requestNotifications()
+                                } else {
+                                    reminderHour = null
+                                    Reminder.hour = null
+                                }
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = MnemoColors.onCoral, checkedTrackColor = MnemoColors.coral),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("Remind me every day", style = MaterialTheme.typography.bodyMedium, color = MnemoColors.text)
+                    }
+                    reminderHour?.let { h ->
+                        Spacer(Modifier.height(12.dp))
+                        MnemoSelect(
+                            label = "At",
+                            options = Reminder.HOURS,
+                            selected = h,
+                            display = { "${it.toString().padStart(2, '0')}:00" },
+                            onSelect = {
+                                reminderHour = it
+                                Reminder.hour = it
+                            },
+                        )
+                    }
+                }
+            }
+            Panel {
                 Eyebrow("Import an Anki deck")
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -244,7 +308,7 @@ fun SettingsScreen() {
                 backups.forEach { b ->
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(

@@ -56,4 +56,5 @@ object Prefs {
     const val ONBOARDED = "onboarded"
     const val FSRS_PARAMS = "fsrs.params"
     const val DAY_START_HOUR = "day.start.hour"
+    const val REMINDER_HOUR = "reminder.hour"
 }
