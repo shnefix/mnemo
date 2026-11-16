@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.mnemo.LocalAppGraph
 import app.mnemo.data.io.ApkgImporter
+import app.mnemo.data.io.AutoBackup
 import app.mnemo.data.io.CsvImporter
 import app.mnemo.data.io.JsonBackup
 import app.mnemo.domain.model.Deck
@@ -57,6 +58,7 @@ fun SettingsScreen() {
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var counts by remember { mutableStateOf("") }
+    var backups by remember { mutableStateOf(AutoBackup.list()) }
 
     suspend fun refresh() {
         decks = graph.decks.all()
@@ -205,6 +207,49 @@ fun SettingsScreen() {
                     })
                     MnemoButton("Restore from JSON…", onClick = pickJson)
                 }
+                Spacer(Modifier.height(16.dp))
+                Eyebrow("Automatic backups")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Written once a day when the app opens; the newest ${AutoBackup.KEEP} are kept in ${appDataDir()}/${AutoBackup.DIR}.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MnemoColors.text2,
+                )
+                Spacer(Modifier.height(8.dp))
+                if (backups.isEmpty()) {
+                    Text("No automatic backup yet.", style = MaterialTheme.typography.bodySmall, color = MnemoColors.text3)
+                }
+                backups.forEach { b ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            "${b.label} · ${b.bytes / 1024} KB",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MnemoColors.text,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MnemoButton("Restore", height = 36.dp, enabled = !busy, onClick = {
+                            busy = true
+                            scope.launch {
+                                val n = runCatching { AutoBackup.restore(graph, b.name) }
+                                message = n.fold({ "Restored $it notes from ${b.label}" }, { "Restore failed: ${it.message}" })
+                                busy = false
+                                refresh()
+                            }
+                        })
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                MnemoButton("Back up now", icon = MnemoIcons.Export, enabled = !busy, onClick = {
+                    scope.launch {
+                        val name = runCatching { AutoBackup.runIfDue(graph, force = true) }.getOrNull()
+                        backups = AutoBackup.list()
+                        message = if (name != null) "Backup written: $name" else "Nothing to back up yet"
+                    }
+                })
             }
             Panel {
                 Eyebrow("AI")

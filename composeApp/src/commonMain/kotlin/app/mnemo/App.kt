@@ -15,6 +15,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import app.mnemo.data.io.AutoBackup
 import app.mnemo.di.AppGraph
 import app.mnemo.platform.Prefs
 import app.mnemo.ui.browse.BrowseScreen
@@ -52,6 +53,8 @@ fun App(
                     onboarded = true
                 }
                 checked = true
+                // Daily safety net; never blocks the UI and never fails the launch.
+                runCatching { AutoBackup.runIfDue(graph) }
             }
             if (!checked) return@MnemoTheme
             if (!onboarded) {

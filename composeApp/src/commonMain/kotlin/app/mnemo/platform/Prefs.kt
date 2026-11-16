@@ -13,6 +13,14 @@ expect fun writeAppFile(
     text: String,
 )
 
+/** Names of the files directly inside the app-data subfolder [dir] (empty when it does not exist). */
+expect fun listAppFiles(dir: String): List<String>
+
+expect fun deleteAppFile(name: String)
+
+/** Size in bytes of an app-data file, or 0 when missing. */
+expect fun appFileSize(name: String): Long
+
 /** Tiny key/value preferences stored as `prefs.json` in the app data folder. */
 object Prefs {
     private const val FILE = "prefs.json"
