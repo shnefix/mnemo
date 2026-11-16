@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -189,6 +191,9 @@ class OnDeviceDesignAuditTest {
             rule.waitUntil(15_000) { exists(hasContentDescription("Create cards")) }
 
             tap("Decks")
+            rule.waitUntil(15_000) {
+                runCatching { rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(deck)) }.isSuccess
+            }
             rule.waitUntil(15_000) { exists(hasText(deck)) }
             lint("11-decks-with-data")
 

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -35,6 +37,14 @@ class OnDeviceUiTest {
     private val deckName = "UiTest ${System.currentTimeMillis() % 100000}"
 
     private fun hasRole(role: Role) = SemanticsMatcher.expectValue(SemanticsProperties.Role, role)
+
+    /** The deck list is lazy: with real decks on the phone a test deck may sit below the fold, and rows load async. */
+    private fun scrollDecksTo(name: String) {
+        rule.waitUntil(15_000) {
+            runCatching { rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name)) }.isSuccess
+        }
+        waitFor(hasText(name))
+    }
 
     /** Waits for [matcher]; on timeout the failure message carries the whole semantics tree. */
     private fun waitFor(
@@ -81,8 +91,9 @@ class OnDeviceUiTest {
         // 3. Decks tab shows the new deck with one due card; tapping it starts a review.
         waitFor(hasContentDescription("Create cards"))
         rule.onNode(hasText("Decks") and hasRole(Role.Tab)).performClick()
-        waitFor(hasText(deckName))
-        rule.onNodeWithText("1 cards · 1 due").assertIsDisplayed()
+        scrollDecksTo(deckName)
+        // The row merges its texts, so match the count on this run's deck rather than on any row.
+        rule.onNode(hasText(deckName) and hasText("1 cards · 1 due")).assertIsDisplayed()
         rule.onNodeWithText(deckName).performClick()
 
         // 4. Review: reveal, grade Good, session ends.
@@ -94,7 +105,7 @@ class OnDeviceUiTest {
         rule.onNodeWithContentDescription("End session").performClick()
 
         // 5. Clean up: delete this run's deck (and any left behind by earlier failed runs) through the row menu.
-        waitFor(hasText(deckName))
+        scrollDecksTo(deckName)
         waitFor(hasContentDescription("Deck menu"))
         var rounds = 0
         while (rounds++ < 5) {
