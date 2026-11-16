@@ -159,7 +159,8 @@ fun SettingsScreen() {
                                     if (r.notes == 0 && r.skipped == 0) {
                                         "No question/answer sections found in ${folder.files.size} files"
                                     } else {
-                                        "Imported ${r.notes} notes (${r.cards} cards) from ${r.files} files into ${r.decks} decks under ${deck.path}" +
+                                        "Imported ${r.notes} notes (${r.cards} cards) from ${r.files} files " +
+                                            "into ${r.decks} decks under ${deck.path}" +
                                             if (r.skipped > 0) " · ${r.skipped} already imported" else ""
                                     }
                                 },
