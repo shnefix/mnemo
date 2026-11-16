@@ -12,7 +12,7 @@ local.properties
 .DS_Store
 
 # App data (sqlite db, media)
-data/
+/data/
 
 # Secrets
 .env
