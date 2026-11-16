@@ -39,6 +39,8 @@ data class ReviewUiState(
     val retrievability: Double = 0.0,
     val sessionCorrect: Int = 0,
     val sessionAgain: Int = 0,
+    /** The current card's deck leech threshold, for the Leech pill. */
+    val leechThreshold: Int = 8,
 ) {
     val progress: Float get() = if (total == 0) 0f else done.toFloat() / total
 }
@@ -95,11 +97,10 @@ class ReviewViewModel(
         val type = types[view.noteTypeId]
         val rendered = type?.let { CardGenerator.render(it, view.fields, view.card.templateIndex) }
         val previews = session.preview(view)
-        val scheduler =
-            graph.scheduler(
-                graph.decks.byId(view.deckId)?.settings ?: app.mnemo.domain.model
-                    .DeckSettings(),
-            )
+        val deckSettings =
+            graph.decks.byId(view.deckId)?.settings ?: app.mnemo.domain.model
+                .DeckSettings()
+        val scheduler = graph.scheduler(deckSettings)
         shownAt = graph.clock.now()
         _state.update {
             it.copy(
@@ -116,6 +117,7 @@ class ReviewViewModel(
                 verdict = null,
                 suggested = null,
                 retrievability = scheduler.retrievability(view.card, shownAt),
+                leechThreshold = deckSettings.leechThreshold,
             )
         }
     }

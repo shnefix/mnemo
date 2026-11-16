@@ -3,6 +3,7 @@ package app.mnemo.ui.review
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -327,7 +328,7 @@ private fun CardStack(
                 .padding(if (compact) 22.dp else 32.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatePill(view.card.state, view.card.lapses)
+                StatePill(view.card.state, view.card.lapses, state.leechThreshold)
                 Text(view.noteKind.displayName, style = MaterialTheme.typography.labelMedium, color = MnemoColors.text3)
                 Spacer(Modifier.weight(1f))
                 if (view.card.state != CardState.New) {
@@ -432,10 +433,11 @@ private fun CardStack(
 private fun StatePill(
     state: CardState,
     lapses: Int,
+    leechThreshold: Int,
 ) {
     val (label, color, bg) =
         when {
-            lapses >= 8 -> Triple("Leech", MnemoColors.danger, MnemoColors.gradeAgainBg)
+            lapses >= leechThreshold -> Triple("Leech", MnemoColors.danger, MnemoColors.gradeAgainBg)
             state == CardState.New -> Triple("New", MnemoColors.stateNew, MnemoColors.gradeEasyBg)
             state == CardState.Learning -> Triple("Learning", MnemoColors.stateLearning, MnemoColors.gradeHardBg)
             state == CardState.Relearning -> Triple("Relearning", MnemoColors.stateLearning, MnemoColors.gradeHardBg)
@@ -476,7 +478,8 @@ private fun GradeBar(
                         .height(80.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(bg)
-                        .then(if (suggested) Modifier.padding(0.dp) else Modifier)
+                        // The suggested grade (Type mode) gets a ring so Enter's target is obvious.
+                        .then(if (suggested) Modifier.border(2.5.dp, fg, RoundedCornerShape(16.dp)) else Modifier)
                         .clickable(role = Role.Button) { onGrade(r) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
