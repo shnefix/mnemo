@@ -1,6 +1,8 @@
 package app.mnemo.di
 
+import app.cash.sqldelight.db.SqlDriver
 import app.mnemo.data.db.DriverFactory
+import app.mnemo.data.repo.BrowseRepository
 import app.mnemo.data.repo.CardRepository
 import app.mnemo.data.repo.ConceptRepository
 import app.mnemo.data.repo.DeckRepository
@@ -21,14 +23,16 @@ import kotlin.random.Random
  * Hand-wired object graph. One instance per process (or per test).
  */
 class AppGraph(
-    val db: MnemoDatabase,
+    val driver: SqlDriver,
     val clock: Clock = SystemClock,
     private val fuzz: Random? = Random.Default,
     initialParameters: FsrsParameters? = null,
 ) {
+    val db: MnemoDatabase = MnemoDatabase(driver)
     val decks = DeckRepository(db, clock)
     val notes = NoteRepository(db, clock)
     val cards = CardRepository(db)
+    val browse = BrowseRepository(driver, db, decks)
     val reviewLogs = ReviewLogRepository(db)
     val concepts = ConceptRepository(db)
 
@@ -61,7 +65,7 @@ class AppGraph(
             dbPath: String?,
             clock: Clock = SystemClock,
             fuzz: Random? = Random.Default,
-        ): AppGraph = AppGraph(MnemoDatabase(driverFactory.create(dbPath)), clock, fuzz)
+        ): AppGraph = AppGraph(driverFactory.create(dbPath), clock, fuzz)
 
         private fun loadParameters(): FsrsParameters =
             runCatching {

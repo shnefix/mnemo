@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -62,6 +63,10 @@ fun TodayScreen(
     val state by vm.state.collectAsState()
     val compact = LocalWindowSize.current == WindowSize.Compact
     val pad = if (compact) 20.dp else 40.dp
+    DisposableEffect(vm) {
+        vm.setVisible(true)
+        onDispose { vm.setVisible(false) }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = pad, vertical = 28.dp)) {
         Column(Modifier.widthIn(max = 1120.dp).fillMaxWidth()) {

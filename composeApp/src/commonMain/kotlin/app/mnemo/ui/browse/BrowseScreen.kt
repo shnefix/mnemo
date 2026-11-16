@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -28,11 +29,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +46,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.mnemo.LocalAppGraph
 import app.mnemo.domain.model.CardState
 import app.mnemo.domain.model.DAY_MS
+import app.mnemo.domain.search.SortKey
 import app.mnemo.ui.components.Chip
 import app.mnemo.ui.components.EmptyState
 import app.mnemo.ui.components.MnemoButton
@@ -70,7 +74,7 @@ fun BrowseScreen(
     val now = graph.clock.now()
 
     Column(Modifier.fillMaxSize().padding(horizontal = if (compact) 20.dp else 40.dp, vertical = 28.dp)) {
-        ScreenHeader(title = "Browse", subtitle = "${state.rows.size} of ${state.totalCards} cards") {
+        ScreenHeader(title = "Browse", subtitle = "${state.matched} of ${state.totalCards} cards") {
             MnemoButton("Add card", onClick = onAdd, icon = MnemoIcons.Plus, primary = true, kbd = if (compact) null else "A")
         }
         Spacer(Modifier.height(16.dp))
@@ -154,8 +158,19 @@ fun BrowseScreen(
                 HeaderCell("State", Modifier.width(84.dp))
                 HeaderCell("Due", Modifier.width(72.dp))
             }
+            val listState = rememberLazyListState()
+            // Page in the next batch as the end of the loaded rows scrolls into view.
+            LaunchedEffect(listState, state.rows.size, state.hasMore) {
+                if (!state.hasMore) return@LaunchedEffect
+                snapshotFlow {
+                    listState.layoutInfo.visibleItemsInfo
+                        .lastOrNull()
+                        ?.index ?: -1
+                }.collect { last -> if (last >= state.rows.size - 20) vm.loadMore() }
+            }
             LazyColumn(
                 Modifier.fillMaxSize(),
+                state = listState,
                 contentPadding = PaddingValues(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
@@ -208,6 +223,13 @@ fun BrowseScreen(
                             color = if (c.due <= now && c.state != CardState.New) MnemoColors.stateReview else MnemoColors.text2,
                             modifier = Modifier.width(72.dp),
                         )
+                    }
+                }
+                if (state.hasMore) {
+                    item(key = "more") {
+                        Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                            MnemoButton("Load ${minOf(BrowseViewModel.PAGE, state.matched - state.rows.size)} more", onClick = vm::loadMore)
+                        }
                     }
                 }
             }

@@ -37,6 +37,20 @@ JOIN deck ON deck.id = note.deck_id
 JOIN note_type ON note_type.id = note.note_type_id
 ORDER BY card.due;
 
+-- Views for a page of ids (Browse); order is restored by the caller.
+cardViewsByIds:
+SELECT card.*, note.deck_id, note.note_type_id, note.fields_json, note.tags, deck.name AS deck_name, note_type.kind AS note_kind, note_type.templates_json
+FROM card
+JOIN note ON note.id = card.note_id
+JOIN deck ON deck.id = note.deck_id
+JOIN note_type ON note_type.id = note.note_type_id
+WHERE card.id IN ?;
+
+-- Cheap query that references the tables Browse/Today depend on, so observing it
+-- re-emits on any card, note or deck change without loading every card.
+changeStamp:
+SELECT (SELECT count(*) FROM card) + (SELECT count(*) FROM note) + (SELECT count(*) FROM deck);
+
 selectByNote:
 SELECT * FROM card WHERE note_id = ? ORDER BY template_index;
 

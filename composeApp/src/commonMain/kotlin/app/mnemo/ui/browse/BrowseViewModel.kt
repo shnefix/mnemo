@@ -2,28 +2,23 @@ package app.mnemo.ui.browse
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.mnemo.data.repo.BrowseRepository
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.cards.CardGenerator
 import app.mnemo.domain.model.CardView
 import app.mnemo.domain.model.Deck
 import app.mnemo.domain.model.NoteType
 import app.mnemo.domain.search.SearchQuery
+import app.mnemo.domain.search.SortKey
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-enum class SortKey(
-    val label: String,
-) {
-    Due("Due"),
-    Created("Created"),
-    Deck("Deck"),
-    State("State"),
-    Lapses("Lapses"),
-}
 
 data class BrowseRow(
     val view: CardView,
@@ -33,15 +28,26 @@ data class BrowseRow(
 
 data class BrowseUiState(
     val query: String = "",
+    /** The rows loaded so far (the first [BrowseViewModel.PAGE] matches, plus whatever "load more" added). */
     val rows: List<BrowseRow> = emptyList(),
+    /** How many cards match the query in total. */
+    val matched: Int = 0,
     val totalCards: Int = 0,
     val sort: SortKey = SortKey.Due,
     val ascending: Boolean = true,
     val selected: Set<Long> = emptySet(),
     val decks: List<Deck> = emptyList(),
     val loading: Boolean = true,
-)
+) {
+    val hasMore: Boolean get() = rows.size < matched
+}
 
+/**
+ * Browse filters and sorts in SQL and loads card views one page at a time.
+ * Selection is by card id and may cover matches that are not loaded yet
+ * ("select all"), so bulk actions resolve note ids from the match list.
+ */
+@OptIn(FlowPreview::class)
 class BrowseViewModel(
     private val graph: AppGraph,
 ) : ViewModel() {
@@ -50,40 +56,60 @@ class BrowseViewModel(
     private val queryFlow = MutableStateFlow("")
     private val sortFlow = MutableStateFlow(SortKey.Due to true)
     private var types: Map<Long, NoteType> = emptyMap()
+    private var matches: List<BrowseRepository.Match> = emptyList()
 
     init {
         viewModelScope.launch {
             types = graph.notes.noteTypes().associateBy { it.id }
-            combine(graph.cards.observeAllViews(), queryFlow, sortFlow, graph.decks.observeAll()) { views, q, sort, decks ->
-                Triple(views, q, sort) to decks
-            }.collect { (triple, decks) ->
-                val (views, q, sort) = triple
-                val now = graph.clock.now()
-                val parsed = SearchQuery.parse(q)
-                val filtered = views.filter { parsed.matches(it, now) }
-                val rows = filtered.map { v -> toRow(v) }
-                val sorted =
-                    when (sort.first) {
-                        SortKey.Due -> rows.sortedBy { it.view.card.due }
-                        SortKey.Created -> rows.sortedBy { it.view.card.id }
-                        SortKey.Deck -> rows.sortedBy { it.view.deckName.lowercase() }
-                        SortKey.State -> rows.sortedBy { it.view.card.state.code }
-                        SortKey.Lapses -> rows.sortedBy { it.view.card.lapses }
-                    }.let { if (sort.second) it else it.reversed() }
-                _state.update {
-                    it.copy(
-                        rows = sorted,
-                        totalCards = views.size,
-                        sort = sort.first,
-                        ascending = sort.second,
-                        decks = decks,
-                        loading = false,
-                        selected = it.selected.filter { id -> sorted.any { r -> r.view.card.id == id } }.toSet(),
-                    )
-                }
+            combine(graph.cards.observeChanges(), queryFlow, sortFlow, graph.decks.observeAll()) { _, q, sort, decks ->
+                Triple(q, sort, decks)
+            }.debounce(DEBOUNCE_MS).collectLatest { (q, sort, decks) ->
+                reload(q, sort, decks)
             }
         }
     }
+
+    private suspend fun reload(
+        q: String,
+        sort: Pair<SortKey, Boolean>,
+        decks: List<Deck>,
+    ) {
+        val now = graph.clock.now()
+        matches = graph.browse.matches(SearchQuery.parse(q), sort.first, sort.second, now)
+        val total = graph.browse.countAll().toInt()
+        // Keep what was scrolled into view, so a grade or tag edit does not jump back to the top.
+        val keep =
+            _state.value.rows.size
+                .coerceIn(PAGE, MAX_RELOAD)
+        val rows = loadRows(matches.take(keep))
+        val ids = matches.map { it.cardId }.toSet()
+        _state.update {
+            it.copy(
+                rows = rows,
+                matched = matches.size,
+                totalCards = total,
+                sort = sort.first,
+                ascending = sort.second,
+                decks = decks,
+                loading = false,
+                selected = it.selected.filter { id -> id in ids }.toSet(),
+            )
+        }
+    }
+
+    /** Appends the next page of matches to [BrowseUiState.rows]. */
+    fun loadMore() {
+        val s = _state.value
+        if (!s.hasMore) return
+        viewModelScope.launch {
+            val next = matches.drop(s.rows.size).take(PAGE)
+            val rows = loadRows(next)
+            _state.update { it.copy(rows = it.rows + rows) }
+        }
+    }
+
+    private suspend fun loadRows(page: List<BrowseRepository.Match>): List<BrowseRow> =
+        graph.cards.viewsByIds(page.map { it.cardId }).map { toRow(it) }
 
     private fun toRow(v: CardView): BrowseRow {
         val type = types[v.noteTypeId]
@@ -126,16 +152,15 @@ class BrowseViewModel(
 
     fun toggle(id: Long) = _state.update { it.copy(selected = if (id in it.selected) it.selected - id else it.selected + id) }
 
-    fun selectAll() = _state.update { s -> s.copy(selected = s.rows.map { it.view.card.id }.toSet()) }
+    /** Selects every match, loaded or not. */
+    fun selectAll() = _state.update { s -> s.copy(selected = matches.map { it.cardId }.toSet()) }
 
     fun clearSelection() = _state.update { it.copy(selected = emptySet()) }
 
-    private fun selectedNoteIds(): Set<Long> =
-        _state.value.rows
-            .filter {
-                it.view.card.id in _state.value.selected
-            }.map { it.view.card.noteId }
-            .toSet()
+    private fun selectedNoteIds(): Set<Long> {
+        val selected = _state.value.selected
+        return matches.filter { it.cardId in selected }.map { it.noteId }.toSet()
+    }
 
     fun addTag(tag: String) {
         viewModelScope.launch {
@@ -173,5 +198,11 @@ class BrowseViewModel(
             selectedNoteIds().forEach { graph.notes.delete(it) }
             clearSelection()
         }
+    }
+
+    companion object {
+        const val PAGE = 100
+        private const val MAX_RELOAD = 1_000
+        private const val DEBOUNCE_MS = 150L
     }
 }

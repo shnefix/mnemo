@@ -10,9 +10,11 @@ import app.mnemo.domain.model.DeckSettings
 import app.mnemo.domain.stats.localDate
 import app.mnemo.domain.stats.reviewsByLocalDate
 import app.mnemo.domain.stats.streak
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 
@@ -46,18 +48,34 @@ data class TodayUiState(
     val totalCards: Int = 0,
 )
 
+@OptIn(FlowPreview::class)
 class TodayViewModel(
     private val graph: AppGraph,
 ) : ViewModel() {
     private val _state = MutableStateFlow(TodayUiState())
     val state: StateFlow<TodayUiState> = _state.asStateFlow()
 
+    private var visible = false
+    private var stale = true
+
     init {
-        refresh()
-        viewModelScope.launch { graph.cards.observeAllViews().collect { refresh() } }
+        viewModelScope.launch {
+            // Grading a card touches the card table on every answer; coalesce those
+            // bursts and only recompute while the screen is actually showing.
+            graph.cards.observeChanges().debounce(DEBOUNCE_MS).collect {
+                if (visible) refresh() else stale = true
+            }
+        }
+    }
+
+    /** Called by the screen as it enters/leaves composition; a stale Today recomputes once on return. */
+    fun setVisible(shown: Boolean) {
+        visible = shown
+        if (shown && stale) refresh()
     }
 
     fun refresh() {
+        stale = false
         viewModelScope.launch {
             val now = graph.clock.now()
             val today = localDate(now)
@@ -134,5 +152,9 @@ class TodayViewModel(
             val m = cards.map { sched.retrievability(it, now) }.average()
             ConceptMastery(c.id, c.name, m, cards.size)
         }
+    }
+
+    companion object {
+        private const val DEBOUNCE_MS = 400L
     }
 }
