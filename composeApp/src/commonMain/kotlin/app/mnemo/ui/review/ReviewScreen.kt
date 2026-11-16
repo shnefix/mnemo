@@ -9,6 +9,8 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,6 +47,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -53,6 +56,7 @@ import app.mnemo.domain.model.CardState
 import app.mnemo.domain.model.Rating
 import app.mnemo.domain.model.ReviewMode
 import app.mnemo.domain.review.AnswerMatcher
+import app.mnemo.platform.Speech
 import app.mnemo.platform.isMobilePlatform
 import app.mnemo.ui.components.IconActionButton
 import app.mnemo.ui.components.Kbd
@@ -71,11 +75,12 @@ import kotlin.math.roundToInt
 @Composable
 fun ReviewScreen(
     deckId: Long?,
+    weak: Boolean = false,
     onExit: () -> Unit,
     onEdit: (noteId: Long) -> Unit,
 ) {
     val graph = LocalAppGraph.current
-    val vm: ReviewViewModel = viewModel(key = "review-$deckId") { ReviewViewModel(graph, deckId) }
+    val vm: ReviewViewModel = viewModel(key = "review-$deckId-$weak") { ReviewViewModel(graph, deckId, weak) }
     val state by vm.state.collectAsState()
     val compact = LocalWindowSize.current == WindowSize.Compact
     val focus = remember { FocusRequester() }
@@ -212,21 +217,42 @@ private fun ReviewTopBar(
             IconActionButton(MnemoIcons.Close, "End session", onClick = onExit)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(state.deckName, style = MaterialTheme.typography.titleSmall, color = MnemoColors.text)
+                Text(
+                    state.deckName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MnemoColors.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text("${state.done} of ${state.total}", style = MaterialTheme.typography.labelMedium, color = MnemoColors.text2)
             }
-            Segmented(
-                options = listOf("Classic", "Type", "Speak"),
-                selected = state.mode.ordinal,
-                onSelect = { onMode(ReviewMode.entries[it]) },
-                enabledMask = listOf(true, true, false),
-                modifier = Modifier.width(if (compact) 200.dp else 240.dp),
-            )
+            if (!compact) {
+                ModeSwitch(state, onMode, Modifier.width(240.dp))
+            }
+        }
+        if (compact) {
+            // Phones are too narrow to share a row with the deck name, so the mode switch gets its own.
+            ModeSwitch(state, onMode, Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp))
         }
         Box(Modifier.fillMaxWidth().height(4.dp).background(MnemoColors.surface3)) {
             Box(Modifier.fillMaxWidth(state.progress).height(4.dp).background(MnemoColors.coral))
         }
     }
+}
+
+@Composable
+private fun ModeSwitch(
+    state: ReviewUiState,
+    onMode: (ReviewMode) -> Unit,
+    modifier: Modifier,
+) {
+    Segmented(
+        options = listOf("Classic", "Type", "Speak"),
+        selected = state.mode.ordinal,
+        onSelect = { onMode(ReviewMode.entries[it]) },
+        enabledMask = listOf(true, true, false),
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -314,6 +340,20 @@ private fun CardStack(
             }
             Spacer(Modifier.height(18.dp))
             MarkdownText(rendered?.question.orEmpty())
+            if (state.language != null && Speech.available) {
+                Spacer(Modifier.height(10.dp))
+                MnemoButton(
+                    "Listen",
+                    icon = MnemoIcons.Speaker,
+                    height = 36.dp,
+                    onClick = {
+                        Speech.speak(
+                            if (state.revealed) rendered?.answer.orEmpty() else rendered?.question.orEmpty(),
+                            state.language,
+                        )
+                    },
+                )
+            }
 
             if (state.mode == ReviewMode.Type && rendered?.expected != null) {
                 Spacer(Modifier.height(18.dp))
@@ -457,6 +497,7 @@ private fun GradeBar(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ActionsRow(
     state: ReviewUiState,
@@ -466,7 +507,12 @@ private fun ActionsRow(
     onSuspend: () -> Unit,
     onBury: () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
         MnemoButton(
             "Undo",
             onClick = onUndo,
@@ -478,7 +524,6 @@ private fun ActionsRow(
         MnemoButton("Edit", onClick = onEdit, icon = MnemoIcons.Edit, kbd = if (compact) null else "E", height = 40.dp)
         MnemoButton("Suspend", onClick = onSuspend, icon = MnemoIcons.Pause, kbd = if (compact) null else "S", height = 40.dp)
         MnemoButton("Bury", onClick = onBury, icon = MnemoIcons.Clock, kbd = if (compact) null else "B", height = 40.dp)
-        Spacer(Modifier.weight(1f))
         state.view?.card?.let { c ->
             if (!compact && c.stability != null) {
                 Text(

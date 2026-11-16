@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.mnemo.ui.theme.MnemoColors
 
@@ -142,6 +143,8 @@ fun <T> MnemoSelect(
                     selected?.let(display) ?: placeholder,
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (selected == null) MnemoColors.text3 else MnemoColors.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 Icon(MnemoIcons.Chevron, contentDescription = null, tint = MnemoColors.text2, modifier = Modifier.size(16.dp))

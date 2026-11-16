@@ -60,3 +60,17 @@ FROM review_log WHERE state_before = 2 AND reviewed_at >= ?;
 
 timeSpentSince:
 SELECT sum(response_ms) FROM review_log WHERE reviewed_at >= ?;
+
+-- Daily limits: new cards first answered since :since (each counts once, however many
+-- learning steps follow) and review-state answers since :since, within the given decks.
+newIntroducedSince:
+SELECT count(DISTINCT review_log.card_id) FROM review_log
+JOIN card ON card.id = review_log.card_id
+JOIN note ON note.id = card.note_id
+WHERE note.deck_id IN ? AND review_log.state_before = 0 AND review_log.reviewed_at >= :since;
+
+reviewsDoneSince:
+SELECT count(*) FROM review_log
+JOIN card ON card.id = review_log.card_id
+JOIN note ON note.id = card.note_id
+WHERE note.deck_id IN ? AND review_log.state_before = 2 AND review_log.reviewed_at >= :since;

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.cards.CardGenerator
 import app.mnemo.domain.cards.RenderedCard
+import app.mnemo.domain.graph.WeakSpots
 import app.mnemo.domain.model.CardView
 import app.mnemo.domain.model.NoteType
 import app.mnemo.domain.model.Rating
@@ -21,6 +22,7 @@ import kotlinx.coroutines.launch
 data class ReviewUiState(
     val loading: Boolean = true,
     val deckName: String = "All decks",
+    val language: String? = null,
     val view: CardView? = null,
     val rendered: RenderedCard? = null,
     val revealed: Boolean = false,
@@ -44,10 +46,11 @@ data class ReviewUiState(
 class ReviewViewModel(
     private val graph: AppGraph,
     private val deckId: Long?,
+    private val weak: Boolean = false,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ReviewUiState())
     val state: StateFlow<ReviewUiState> = _state.asStateFlow()
-    private val session = ReviewSession(graph, deckId)
+    private lateinit var session: ReviewSession
     private var types: Map<Long, NoteType> = emptyMap()
     private var shownAt: Long = 0
 
@@ -55,8 +58,20 @@ class ReviewViewModel(
         viewModelScope.launch {
             types = graph.notes.noteTypes().associateBy { it.id }
             val deck = deckId?.let { graph.decks.byId(it) }
+            session =
+                if (weak) {
+                    ReviewSession(graph, null, WeakSpots.sessionCards(graph, graph.clock.now()))
+                } else {
+                    ReviewSession(graph, deckId)
+                }
             session.load()
-            _state.update { it.copy(deckName = deck?.path ?: "All decks", mode = deck?.settings?.mode ?: ReviewMode.Classic) }
+            _state.update {
+                it.copy(
+                    deckName = if (weak) "Weak spots" else deck?.path ?: "All decks",
+                    mode = deck?.settings?.mode ?: ReviewMode.Classic,
+                    language = deck?.settings?.language,
+                )
+            }
             showNext()
         }
     }
@@ -147,10 +162,27 @@ class ReviewViewModel(
 
     fun undo() {
         viewModelScope.launch {
-            if (session.undo()) {
-                _state.update { it.copy(toast = "Last review undone") }
-                showNext()
-                _state.update { it.copy(revealed = true) }
+            when (val undone = session.undo()) {
+                null -> return@launch
+                is ReviewSession.Undone.Answer -> {
+                    _state.update {
+                        it.copy(
+                            toast = "Last review undone",
+                            sessionCorrect = it.sessionCorrect - if (undone.rating != Rating.Again) 1 else 0,
+                            sessionAgain = it.sessionAgain - if (undone.rating == Rating.Again) 1 else 0,
+                        )
+                    }
+                    showNext()
+                    _state.update { it.copy(revealed = true) }
+                }
+                ReviewSession.Undone.Suspend -> {
+                    _state.update { it.copy(toast = "Suspend undone") }
+                    showNext()
+                }
+                ReviewSession.Undone.Bury -> {
+                    _state.update { it.copy(toast = "Bury undone") }
+                    showNext()
+                }
             }
         }
     }

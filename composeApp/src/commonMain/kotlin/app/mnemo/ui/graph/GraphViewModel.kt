@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.cards.CardGenerator
+import app.mnemo.domain.graph.ConceptSuggester
 import app.mnemo.domain.model.CardView
 import app.mnemo.domain.model.Concept
 import app.mnemo.domain.model.ConceptEdge
@@ -40,6 +41,8 @@ data class GraphUiState(
     val selectedId: Long? = null,
     val selectedCards: List<LinkedCard> = emptyList(),
     val allCards: List<Pair<CardView, String>> = emptyList(),
+    val suggestions: List<ConceptSuggester.Suggestion> = emptyList(),
+    val suggested: Boolean = false,
 ) {
     val selected: GraphNode? get() = nodes.firstOrNull { it.concept.id == selectedId }
 }
@@ -181,6 +184,31 @@ class GraphViewModel(
             _state.update { it.copy(selectedCards = cards) }
         }
     }
+
+    /** Groups cards by tags and by text similarity into concept proposals (no AI involved). */
+    fun suggest() {
+        viewModelScope.launch {
+            val s = _state.value
+            val texts =
+                s.allCards.map { (v, q) ->
+                    ConceptSuggester.CardText(v.card.id, q + " " + v.fields.values.joinToString(" "), v.tags, v.deckName)
+                }
+            val existing = s.nodes.map { it.concept.name }.toSet()
+            _state.update { it.copy(suggestions = ConceptSuggester.suggest(texts, existing), suggested = true) }
+        }
+    }
+
+    fun acceptSuggestion(sg: ConceptSuggester.Suggestion) {
+        viewModelScope.launch {
+            val id = graph.concepts.create(sg.name, sg.reason)
+            sg.cardIds.forEach { graph.concepts.link(it, id) }
+            _state.update { it.copy(suggestions = it.suggestions - sg) }
+            reload()
+            select(id)
+        }
+    }
+
+    fun dismissSuggestion(sg: ConceptSuggester.Suggestion) = _state.update { it.copy(suggestions = it.suggestions - sg) }
 
     fun createConcept(
         name: String,

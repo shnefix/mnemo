@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -60,7 +62,10 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 @Composable
-fun GraphScreen(onEditCard: (noteId: Long) -> Unit) {
+fun GraphScreen(
+    onEditCard: (noteId: Long) -> Unit,
+    onWeakSpots: () -> Unit = {},
+) {
     val graph = LocalAppGraph.current
     val vm: GraphViewModel = viewModel(key = "graph") { GraphViewModel(graph) }
     val state by vm.state.collectAsState()
@@ -72,7 +77,41 @@ fun GraphScreen(onEditCard: (noteId: Long) -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = if (compact) 20.dp else 40.dp, vertical = 28.dp),
     ) {
         ScreenHeader(title = "Knowledge graph", subtitle = "${state.nodes.size} concepts · nodes colored by mastery") {
+            MnemoButton("Suggest concepts", onClick = vm::suggest, icon = MnemoIcons.Bulb)
+            MnemoButton("Weak spots", onClick = onWeakSpots, icon = MnemoIcons.Target, enabled = state.nodes.isNotEmpty())
             MnemoButton("New concept", onClick = { creating = true }, icon = MnemoIcons.Plus, primary = true)
+        }
+        if (state.suggested) {
+            Spacer(Modifier.height(12.dp))
+            Panel(padding = PaddingValues(16.dp)) {
+                Eyebrow(
+                    if (state.suggestions.isEmpty()) {
+                        "No new concepts to suggest"
+                    } else {
+                        "Suggested concepts · shared tags and similar wording"
+                    },
+                )
+                if (state.suggestions.isEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Add tags or more cards on a topic and try again. Groups need at least three cards.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MnemoColors.text2,
+                    )
+                }
+                state.suggestions.forEach { sg ->
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(sg.name, style = MaterialTheme.typography.titleSmall, color = MnemoColors.text)
+                            Text(sg.reason, style = MaterialTheme.typography.bodySmall, color = MnemoColors.text2)
+                        }
+                        MnemoButton("Accept", onClick = { vm.acceptSuggestion(sg) }, height = 36.dp, primary = true)
+                        Spacer(Modifier.width(6.dp))
+                        MnemoButton("Dismiss", onClick = { vm.dismissSuggestion(sg) }, height = 36.dp)
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(16.dp))
         if (compact) {
@@ -104,6 +143,7 @@ fun GraphScreen(onEditCard: (noteId: Long) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GraphCanvas(
     state: GraphUiState,
@@ -204,10 +244,11 @@ private fun GraphCanvas(
                 )
             }
         }
-        Row(
+        FlowRow(
             Modifier.align(Alignment.BottomStart).padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             Legend("related", null)
             Legend("prerequisite", "- -")

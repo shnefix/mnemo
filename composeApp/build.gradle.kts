@@ -103,6 +103,16 @@ kotlin {
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.sqldelight.android.driver)
             }
+            // On-device tests (`./gradlew :composeApp:connectedDebugAndroidTest` with a phone attached).
+            val androidInstrumentedTest by getting {
+                dependencies {
+                    implementation(libs.kotlin.test)
+                    implementation(libs.kotlinx.coroutines.test)
+                    implementation(libs.androidx.test.runner)
+                    implementation(libs.androidx.test.junit)
+                    implementation(libs.androidx.compose.ui.test.junit4)
+                }
+            }
         }
     }
 }
@@ -110,13 +120,14 @@ kotlin {
 if (androidSdkPresent) {
     extensions.configure<com.android.build.api.dsl.ApplicationExtension>("android") {
         namespace = "app.mnemo"
-        compileSdk = 36
+        compileSdk = 37
         defaultConfig {
             applicationId = "app.mnemo"
             minSdk = 26
             targetSdk = 36
             versionCode = 1
             versionName = "0.1.0"
+            testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         }
         packaging {
             resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
@@ -153,6 +164,8 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "Mnemo"
             packageVersion = "0.1.0"
+            linux { iconFile.set(project.file("src/desktopMain/resources/icon.png")) }
+            windows { iconFile.set(project.file("src/desktopMain/resources/icon.png")) }
         }
     }
 }

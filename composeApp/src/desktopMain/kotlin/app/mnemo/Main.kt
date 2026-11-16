@@ -1,6 +1,9 @@
 package app.mnemo
 
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.res.loadImageBitmap
+import androidx.compose.ui.res.useResource
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -25,7 +28,8 @@ fun main() {
                 size = DpSize(1280.dp, 860.dp),
                 position = WindowPosition.Aligned(Alignment.Center),
             )
-        Window(onCloseRequest = ::exitApplication, title = "Mnemo", state = state) {
+        val icon = BitmapPainter(useResource("icon.png", ::loadImageBitmap))
+        Window(onCloseRequest = ::exitApplication, title = "Mnemo", icon = icon, state = state) {
             App(graph, theme)
         }
     }

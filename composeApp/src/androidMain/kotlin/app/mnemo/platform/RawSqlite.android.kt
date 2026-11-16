@@ -3,7 +3,9 @@ package app.mnemo.platform
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 
-actual class RawSqlite actual constructor(path: String) : AutoCloseable {
+actual class RawSqlite actual constructor(
+    path: String,
+) : AutoCloseable {
     private val db: SQLiteDatabase = SQLiteDatabase.openDatabase(path, null, SQLiteDatabase.OPEN_READONLY)
 
     actual fun query(

@@ -16,10 +16,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         appContext = applicationContext
-        val graph = graphHolder ?: AppGraph.create(DriverFactory(applicationContext), appDataDir() + "/mnemo.db").also {
-            runBlocking { it.seed() }
-            graphHolder = it
-        }
+        val graph =
+            graphHolder ?: AppGraph.create(DriverFactory(applicationContext), appDataDir() + "/mnemo.db").also {
+                runBlocking { it.seed() }
+                graphHolder = it
+            }
         setContent { App(graph, ThemeState.fromPrefs()) }
     }
 

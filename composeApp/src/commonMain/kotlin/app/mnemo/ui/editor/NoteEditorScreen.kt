@@ -3,6 +3,8 @@ package app.mnemo.ui.editor
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,6 +49,7 @@ import app.mnemo.ui.nav.LocalWindowSize
 import app.mnemo.ui.nav.WindowSize
 import app.mnemo.ui.theme.MnemoColors
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun NoteEditorScreen(
     noteId: Long?,
@@ -155,7 +158,7 @@ fun NoteEditorScreen(
                     Text(it, color = MnemoColors.success, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(10.dp))
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (state.editingNoteId == null) {
                         MnemoButton(
                             "Save & add another",

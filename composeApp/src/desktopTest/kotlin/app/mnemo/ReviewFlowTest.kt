@@ -2,6 +2,7 @@ package app.mnemo
 
 import app.mnemo.data.db.DriverFactory
 import app.mnemo.di.AppGraph
+import app.mnemo.domain.cards.CardGenerator
 import app.mnemo.domain.model.CardState
 import app.mnemo.domain.model.DAY_MS
 import app.mnemo.domain.model.DeckSettings
@@ -9,11 +10,15 @@ import app.mnemo.domain.model.MINUTE_MS
 import app.mnemo.domain.model.NoteKind
 import app.mnemo.domain.model.Rating
 import app.mnemo.domain.review.ReviewSession
+import app.mnemo.domain.stats.nextLocalDayStart
+import app.mnemo.domain.stats.startOfLocalDay
 import app.mnemo.platform.Clock
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** A controllable clock for the end-to-end flow. */
@@ -42,7 +47,7 @@ class ReviewFlowTest {
         runBlocking {
             val g = graph()
             g.seed()
-            assertEquals(4, g.notes.noteTypes().size)
+            assertEquals(CardGenerator.builtInTypes().size, g.notes.noteTypes().size)
         }
 
     @Test
@@ -96,7 +101,7 @@ class ReviewFlowTest {
             assertEquals(21, session.total)
 
             // Undo brings the second card back as new at the front.
-            assertTrue(session.undo())
+            assertNotNull(session.undo())
             val again = assertNotNull(session.current())
             assertEquals(second.card.id, again.card.id)
             assertEquals(CardState.New, again.card.state)
@@ -158,6 +163,138 @@ class ReviewFlowTest {
             val card = g.cards.byNote(noteId).single()
             assertTrue(card.suspended)
             assertEquals(2, card.lapses)
+        }
+
+    /** Noon of the local day containing [start]: well inside one day whatever the machine's time zone. */
+    private val noon: Long get() = startOfLocalDay(start) + 12 * 60 * MINUTE_MS
+
+    @Test
+    fun dailyNewLimitCountsCardsAlreadyIntroducedToday() =
+        runBlocking {
+            val clock = TestClock(noon)
+            val g = graph(clock)
+            val deckId = g.decks.createByPath("Limits")
+            g.decks.updateSettings(deckId, DeckSettings(newPerDay = 5, learningSteps = emptyList()))
+            val basic = g.notes.noteTypeOf(NoteKind.Basic)
+            repeat(12) { i -> g.notes.create(deckId, basic, mapOf("Front" to "Q$i", "Back" to "A$i"), emptyList()) }
+
+            // First sitting: five new cards, graded Good (no steps → straight to review).
+            var session = ReviewSession(g, deckId)
+            assertEquals(5, session.load())
+            while (!session.isFinished) session.answer(Rating.Good, 1000)
+            assertEquals(5, g.reviewLogs.newIntroducedSince(listOf(deckId), startOfLocalDay(clock.now())))
+
+            // Reopening Review an hour later must not hand out another five.
+            clock.advance(60 * MINUTE_MS)
+            session = ReviewSession(g, deckId)
+            assertEquals(0, session.load())
+            assertEquals(0, g.cards.dueCounts(listOf(deckId), clock.now(), 5, 200).new)
+
+            // Undoing one of today's answers frees one slot again.
+            // (Fresh session; the old one's undo stack is gone, so grade and undo here.)
+            clock.advance(60 * MINUTE_MS)
+            g.decks.updateSettings(deckId, DeckSettings(newPerDay = 6, learningSteps = emptyList()))
+            session = ReviewSession(g, deckId)
+            assertEquals(1, session.load())
+            session.answer(Rating.Good, 1000)
+            assertEquals(0, ReviewSession(g, deckId).load())
+            assertNotNull(session.undo())
+            assertEquals(1, ReviewSession(g, deckId).load())
+
+            // Tomorrow the limit resets.
+            clock.time = nextLocalDayStart(clock.now()) + 60 * MINUTE_MS
+            g.decks.updateSettings(deckId, DeckSettings(newPerDay = 5, learningSteps = emptyList()))
+            assertEquals(5, ReviewSession(g, deckId).load())
+        }
+
+    @Test
+    fun dailyReviewLimitCountsReviewsAlreadyDoneToday() =
+        runBlocking {
+            val clock = TestClock(noon)
+            val g = graph(clock)
+            val deckId = g.decks.createByPath("ReviewLimit")
+            g.decks.updateSettings(deckId, DeckSettings(newPerDay = 10, reviewsPerDay = 3, learningSteps = emptyList()))
+            val basic = g.notes.noteTypeOf(NoteKind.Basic)
+            repeat(6) { i -> g.notes.create(deckId, basic, mapOf("Front" to "Q$i", "Back" to "A$i"), emptyList()) }
+            var session = ReviewSession(g, deckId)
+            assertEquals(6, session.load())
+            while (!session.isFinished) session.answer(Rating.Good, 1000)
+
+            // Ten days on, all six are due but only three reviews are allowed per day.
+            clock.time = startOfLocalDay(clock.now() + 10 * DAY_MS) + 12 * 60 * MINUTE_MS
+            session = ReviewSession(g, deckId)
+            assertEquals(3, session.load())
+            while (!session.isFinished) session.answer(Rating.Good, 1000)
+            clock.advance(5 * MINUTE_MS)
+            assertEquals(0, ReviewSession(g, deckId).load())
+            assertEquals(0, g.cards.dueCounts(listOf(deckId), clock.now(), 10, 3).review)
+            clock.time = nextLocalDayStart(clock.now()) + 60 * MINUTE_MS
+            assertEquals(3, ReviewSession(g, deckId).load())
+        }
+
+    @Test
+    fun undoRevertsLeechTagAndSuspension() =
+        runBlocking {
+            val clock = TestClock(noon)
+            val g = graph(clock)
+            val deckId = g.decks.createByPath("Leech")
+            g.decks.updateSettings(deckId, DeckSettings(leechThreshold = 1, leechSuspend = true, relearningSteps = emptyList()))
+            val basic = g.notes.noteTypeOf(NoteKind.Basic)
+            val noteId = g.notes.create(deckId, basic, mapOf("Front" to "q", "Back" to "a"), emptyList())
+            var session = ReviewSession(g, deckId)
+            session.load()
+            session.answer(Rating.Easy, 1000)
+            clock.advance(9 * DAY_MS)
+            session = ReviewSession(g, deckId)
+            assertEquals(1, session.load())
+            session.answer(Rating.Again, 1000)
+            assertTrue("leech" in assertNotNull(g.notes.byId(noteId)).tags)
+            assertTrue(
+                g.cards
+                    .byNote(noteId)
+                    .single()
+                    .suspended,
+            )
+
+            assertEquals(ReviewSession.Undone.Answer(Rating.Again), session.undo())
+            assertFalse("leech" in assertNotNull(g.notes.byId(noteId)).tags)
+            val card = g.cards.byNote(noteId).single()
+            assertFalse(card.suspended)
+            assertEquals(0, card.lapses)
+            assertEquals(CardState.Review, card.state)
+            assertEquals(1L, g.reviewLogs.countAll())
+            assertEquals(card.id, assertNotNull(session.current()).card.id)
+        }
+
+    @Test
+    fun suspendAndBuryAreUndoableAndBuryLastsUntilLocalTomorrow() =
+        runBlocking {
+            val clock = TestClock(noon)
+            val g = graph(clock)
+            val deckId = g.decks.createByPath("Undo")
+            val basic = g.notes.noteTypeOf(NoteKind.Basic)
+            repeat(3) { i -> g.notes.create(deckId, basic, mapOf("Front" to "Q$i", "Back" to "A$i"), emptyList()) }
+            val session = ReviewSession(g, deckId)
+            assertEquals(3, session.load())
+            assertNull(session.undo())
+
+            val first = assertNotNull(session.current()).card
+            assertTrue(session.suspendCurrent())
+            assertEquals(2, session.total)
+            assertTrue(assertNotNull(g.cards.byId(first.id)).suspended)
+            assertEquals(ReviewSession.Undone.Suspend, session.undo())
+            assertFalse(assertNotNull(g.cards.byId(first.id)).suspended)
+            assertEquals(3, session.total)
+            assertEquals(first.id, assertNotNull(session.current()).card.id)
+
+            assertTrue(session.buryCurrent())
+            val buried = assertNotNull(g.cards.byId(first.id))
+            assertEquals(nextLocalDayStart(clock.now()), buried.buriedUntil)
+            assertTrue(buried.buriedUntil!! > clock.now())
+            assertEquals(ReviewSession.Undone.Bury, session.undo())
+            assertNull(assertNotNull(g.cards.byId(first.id)).buriedUntil)
+            assertEquals(first.id, assertNotNull(session.current()).card.id)
+            assertEquals(3, session.total)
         }
 
     @Test

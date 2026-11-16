@@ -44,6 +44,44 @@ object CardGenerator {
                     expected = ClozeParser.answerFor(text, cloze),
                 )
             }
+            NoteKind.Vocab -> {
+                val word = fields["Word"].orEmpty().trim()
+                val translation = fields["Translation"].orEmpty().trim()
+                val gender = fields["Gender"].orEmpty().trim()
+                val plural = fields["Plural"].orEmpty().trim()
+                val ipa = fields["IPA"].orEmpty().trim()
+                val example = fields["Example"].orEmpty().trim()
+                val exampleT = fields["Example translation"].orEmpty().trim()
+                val headline = if (gender.isNotEmpty() && !word.lowercase().startsWith(gender.lowercase() + " ")) "$gender $word" else word
+                val details =
+                    buildString {
+                        if (plural.isNotEmpty()) append("Plural: *$plural*  \n")
+                        if (ipa.isNotEmpty()) append("$ipa  \n")
+                        if (example.isNotEmpty()) append("\n> $example")
+                        if (exampleT.isNotEmpty()) append("  \n> *$exampleT*")
+                    }.trim()
+                if (templateIndex == 0) {
+                    RenderedCard(
+                        question = word,
+                        answer =
+                            listOf("**$translation**", details)
+                                .filter {
+                                    it.isNotEmpty()
+                                }.joinToString("\n\n"),
+                        expected = translation,
+                    )
+                } else {
+                    RenderedCard(
+                        question = translation,
+                        answer =
+                            listOf("**$headline**", details)
+                                .filter {
+                                    it.isNotEmpty()
+                                }.joinToString("\n\n"),
+                        expected = word,
+                    )
+                }
+            }
             else -> {
                 val template = noteType.templates.getOrElse(templateIndex) { noteType.templates.first() }
                 val question = fill(template.front, fields)
@@ -60,7 +98,7 @@ object CardGenerator {
         template: String,
         fields: Map<String, String>,
     ): String =
-        Regex("""\{\{([^}]+)}}""").replace(template) { m ->
+        Regex("""\{\{([^}]+)\}\}""").replace(template) { m ->
             fields[m.groupValues[1].trim()].orEmpty()
         }
 
@@ -98,6 +136,17 @@ object CardGenerator {
                 kind = NoteKind.TypeAnswer,
                 fields = listOf("Front", "Back"),
                 templates = listOf(CardTemplate("Card 1", "{{Front}}", "{{Back}}")),
+            ),
+            NoteType(
+                id = 0,
+                name = "Vocabulary",
+                kind = NoteKind.Vocab,
+                fields = listOf("Word", "Translation", "Gender", "Plural", "IPA", "Example", "Example translation"),
+                templates =
+                    listOf(
+                        CardTemplate("Word → Translation", "{{Word}}", "{{Translation}}"),
+                        CardTemplate("Translation → Word", "{{Translation}}", "{{Word}}"),
+                    ),
             ),
         )
 }

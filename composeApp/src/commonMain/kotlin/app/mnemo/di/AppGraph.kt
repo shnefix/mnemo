@@ -9,9 +9,12 @@ import app.mnemo.data.repo.ReviewLogRepository
 import app.mnemo.db.MnemoDatabase
 import app.mnemo.domain.model.DeckSettings
 import app.mnemo.domain.scheduler.Fsrs
+import app.mnemo.domain.scheduler.FsrsParameters
 import app.mnemo.domain.scheduler.Scheduler
 import app.mnemo.platform.Clock
+import app.mnemo.platform.Prefs
 import app.mnemo.platform.SystemClock
+import kotlinx.serialization.json.Json
 import kotlin.random.Random
 
 /**
@@ -21,15 +24,32 @@ class AppGraph(
     val db: MnemoDatabase,
     val clock: Clock = SystemClock,
     private val fuzz: Random? = Random.Default,
+    initialParameters: FsrsParameters? = null,
 ) {
     val decks = DeckRepository(db, clock)
     val notes = NoteRepository(db, clock)
     val cards = CardRepository(db)
     val reviewLogs = ReviewLogRepository(db)
     val concepts = ConceptRepository(db)
-    val fsrs = Fsrs()
+
+    /** The scheduler weights in use: the published defaults until the optimizer fits your own. */
+    var fsrs: Fsrs = Fsrs(initialParameters ?: loadParameters())
+        private set
+
+    val usesCustomParameters: Boolean get() = !fsrs.parameters.w.contentEquals(FsrsParameters.DEFAULT.w)
 
     fun scheduler(settings: DeckSettings): Scheduler = Scheduler(fsrs, settings, fuzz)
+
+    fun setParameters(parameters: FsrsParameters?) {
+        fsrs = Fsrs(parameters ?: FsrsParameters.DEFAULT)
+        if (parameters ==
+            null
+        ) {
+            Prefs.set(Prefs.FSRS_PARAMS, "")
+        } else {
+            Prefs.set(Prefs.FSRS_PARAMS, Json.encodeToString(parameters.w.toList()))
+        }
+    }
 
     suspend fun seed() {
         notes.ensureBuiltInTypes()
@@ -42,5 +62,11 @@ class AppGraph(
             clock: Clock = SystemClock,
             fuzz: Random? = Random.Default,
         ): AppGraph = AppGraph(MnemoDatabase(driverFactory.create(dbPath)), clock, fuzz)
+
+        private fun loadParameters(): FsrsParameters =
+            runCatching {
+                val raw = Prefs.get(Prefs.FSRS_PARAMS)?.takeIf { it.isNotBlank() } ?: return FsrsParameters.DEFAULT
+                FsrsParameters(Json.decodeFromString<List<Double>>(raw).toDoubleArray())
+            }.getOrDefault(FsrsParameters.DEFAULT)
     }
 }

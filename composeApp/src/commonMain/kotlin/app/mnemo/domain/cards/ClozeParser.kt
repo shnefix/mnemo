@@ -5,7 +5,7 @@ package app.mnemo.domain.cards
  * One card is generated per distinct cloze number.
  */
 object ClozeParser {
-    private val pattern = Regex("""\{\{c(\d+)::(.+?)(?:::(.+?))?}}""")
+    private val pattern = Regex("""\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}""")
 
     data class Cloze(
         val index: Int,

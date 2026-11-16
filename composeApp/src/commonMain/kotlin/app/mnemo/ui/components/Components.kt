@@ -3,19 +3,23 @@ package app.mnemo.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -32,6 +36,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.mnemo.ui.nav.LocalWindowSize
+import app.mnemo.ui.nav.WindowSize
 import app.mnemo.ui.theme.MnemoColors
 import app.mnemo.ui.theme.masteryColor
 
@@ -51,25 +57,46 @@ fun Panel(
 }
 
 /** Page title with optional subtitle, Design A style. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ScreenHeader(
     title: String,
     subtitle: String? = null,
-    actions: @Composable RowScope.() -> Unit = {},
+    actions: @Composable FlowRowScope.() -> Unit = {},
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(Modifier.weight(1f)) {
+    val titleBlock: @Composable (Modifier) -> Unit = { mod ->
+        Column(mod) {
             if (subtitle != null) {
                 Text(subtitle, style = MaterialTheme.typography.labelLarge, color = MnemoColors.text2)
                 Spacer(Modifier.height(2.dp))
             }
             Text(title, style = MaterialTheme.typography.displaySmall, color = MnemoColors.text)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
+    }
+    if (LocalWindowSize.current == WindowSize.Compact) {
+        // Phone: actions wrap under the title instead of squeezing it to zero width.
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            titleBlock(Modifier.fillMaxWidth())
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+                content = actions,
+            )
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            titleBlock(Modifier.weight(1f))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+                content = actions,
+            )
+        }
     }
 }
 
@@ -116,7 +143,7 @@ fun MnemoButton(
                 Spacer(Modifier.width(8.dp))
             }
             Text(text, style = MaterialTheme.typography.labelLarge, color = fg)
-            if (kbd != null) {
+            if (kbd != null && LocalWindowSize.current != WindowSize.Compact) {
                 Spacer(Modifier.width(10.dp))
                 Kbd(kbd, onDark = !primary)
             }
@@ -198,8 +225,14 @@ fun Segmented(
     modifier: Modifier = Modifier,
     enabledMask: List<Boolean>? = null,
 ) {
+    val scrolls = options.size > 3 && LocalWindowSize.current == WindowSize.Compact
     Row(
-        modifier = modifier.clip(RoundedCornerShape(12.dp)).background(MnemoColors.surface2).padding(3.dp),
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(MnemoColors.surface2)
+                .then(if (scrolls) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+                .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         options.forEachIndexed { i, label ->
@@ -208,7 +241,7 @@ fun Segmented(
             Box(
                 modifier =
                     Modifier
-                        .weight(1f)
+                        .then(if (scrolls) Modifier else Modifier.weight(1f))
                         .height(36.dp)
                         .clip(RoundedCornerShape(9.dp))
                         .background(if (on) MnemoColors.text else Color.Transparent)
@@ -218,6 +251,9 @@ fun Segmented(
                 Text(
                     label,
                     style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = if (scrolls) Modifier.padding(horizontal = 14.dp) else Modifier.padding(horizontal = 4.dp),
                     color =
                         when {
                             on -> MnemoColors.background

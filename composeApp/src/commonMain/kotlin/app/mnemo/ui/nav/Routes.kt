@@ -10,6 +10,8 @@ sealed interface Route {
 
     @Serializable data class Review(
         val deckId: Long? = null,
+        /** Review the cards of the weakest concepts instead of what is due. */
+        val weak: Boolean = false,
     ) : Route
 
     @Serializable data object Browse : Route

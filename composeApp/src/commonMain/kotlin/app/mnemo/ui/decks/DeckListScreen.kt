@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.mnemo.LocalAppGraph
@@ -56,6 +57,8 @@ fun DeckListScreen(
     onReview: (Long) -> Unit,
     onAddCards: (Long) -> Unit,
     onSettings: (Long) -> Unit,
+    onBrowse: () -> Unit = {},
+    onAppSettings: () -> Unit = {},
 ) {
     val graph = LocalAppGraph.current
     val vm: DecksViewModel = viewModel(key = "decks") { DecksViewModel(graph) }
@@ -73,6 +76,11 @@ fun DeckListScreen(
         item {
             ScreenHeader(title = "Decks", subtitle = "${state.rows.size} decks") {
                 MnemoButton("New deck", onClick = { showCreate = true }, icon = MnemoIcons.Plus, primary = true)
+                // Phones have no sidebar, so Browse and Settings are reached from here.
+                if (compact) {
+                    MnemoButton("Browse", onClick = onBrowse, icon = MnemoIcons.Search)
+                    MnemoButton("Settings", onClick = onAppSettings, icon = MnemoIcons.Settings)
+                }
             }
             Spacer(Modifier.height(12.dp))
         }
@@ -164,7 +172,20 @@ private fun DeckRowItem(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(row.deck.name, style = MaterialTheme.typography.titleLarge, color = MnemoColors.text)
+                Text(
+                    row.deck.name,
+                    style =
+                        if (LocalWindowSize.current ==
+                            WindowSize.Compact
+                        ) {
+                            MaterialTheme.typography.titleMedium
+                        } else {
+                            MaterialTheme.typography.titleLarge
+                        },
+                    color = MnemoColors.text,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     "${row.cardCount} cards · ${row.due.total} due",

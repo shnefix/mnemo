@@ -46,4 +46,5 @@ object Prefs {
 
     const val THEME = "theme"
     const val ONBOARDED = "onboarded"
+    const val FSRS_PARAMS = "fsrs.params"
 }

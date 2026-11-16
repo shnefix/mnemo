@@ -33,8 +33,8 @@ import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 
-private val imageRef = Regex("""!\[[^]]*]\(([^)]+)\)""")
-private val soundRef = Regex("""\[sound:([^]]+)]""")
+private val imageRef = Regex("""!\[[^\]]*\]\(([^)]+)\)""")
+private val soundRef = Regex("""\[sound:([^\]]+)\]""")
 
 /**
  * Renders a field: Markdown text, with `![](file)` images and `[sound:file]`

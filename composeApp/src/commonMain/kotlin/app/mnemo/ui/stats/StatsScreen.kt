@@ -5,6 +5,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -24,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,11 +35,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.mnemo.LocalAppGraph
 import app.mnemo.domain.cards.CardGenerator
+import app.mnemo.domain.graph.WeakSpots
 import app.mnemo.domain.model.DAY_MS
+import app.mnemo.domain.scheduler.FsrsOptimizer
 import app.mnemo.domain.stats.localDate
 import app.mnemo.domain.stats.longestStreak
 import app.mnemo.domain.stats.reviewsByLocalDate
 import app.mnemo.domain.stats.streak
+import app.mnemo.ui.components.MasteryBar
 import app.mnemo.ui.components.MnemoButton
 import app.mnemo.ui.components.Panel
 import app.mnemo.ui.components.ScreenHeader
@@ -44,9 +50,14 @@ import app.mnemo.ui.components.StatTile
 import app.mnemo.ui.nav.LocalWindowSize
 import app.mnemo.ui.nav.WindowSize
 import app.mnemo.ui.theme.MnemoColors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
 import kotlin.math.roundToInt
+
+private fun fmt3(d: Double): String = ((d * 1000).roundToInt() / 1000.0).toString()
 
 private data class StatsData(
     val heat: List<Pair<LocalDate, Int>>,
@@ -60,13 +71,18 @@ private data class StatsData(
     val leeches: List<Pair<String, Int>>,
     val hardest: List<Pair<String, Double>>,
     val totalReviews: Int,
+    val concepts: List<WeakSpots.ConceptScore>,
 )
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun StatsScreen(onEdit: (Long) -> Unit) {
     val graph = LocalAppGraph.current
     val compact = LocalWindowSize.current == WindowSize.Compact
     var data by remember { mutableStateOf<StatsData?>(null) }
+    var optimizing by remember { mutableStateOf(false) }
+    var optimizeMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         val now = graph.clock.now()
@@ -108,6 +124,7 @@ fun StatsScreen(onEdit: (Long) -> Unit) {
                 leeches = leeches,
                 hardest = hardest,
                 totalReviews = graph.reviewLogs.countAll().toInt(),
+                concepts = WeakSpots.scores(graph, now).sortedBy { it.mastery },
             )
     }
 
@@ -142,12 +159,16 @@ fun StatsScreen(onEdit: (Long) -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             Panel {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
                         "Reviews per day · 26 weeks",
                         style = MaterialTheme.typography.headlineSmall,
                         color = MnemoColors.text,
-                        modifier = Modifier.weight(1f),
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text("less", style = MaterialTheme.typography.labelSmall, color = MnemoColors.text3)
@@ -242,15 +263,82 @@ fun StatsScreen(onEdit: (Long) -> Unit) {
                 }
             }
             Spacer(Modifier.height(16.dp))
+            if (d.concepts.isNotEmpty()) {
+                Panel {
+                    Text("Mastery by concept", style = MaterialTheme.typography.headlineSmall, color = MnemoColors.text)
+                    Text(
+                        "mean recall probability of each concept's cards · weakest first",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MnemoColors.text2,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    d.concepts.forEach { c ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                c.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MnemoColors.text,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                            )
+                            Text("${c.cardIds.size} cards", style = MaterialTheme.typography.bodySmall, color = MnemoColors.text2)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        MasteryBar(c.mastery)
+                        Spacer(Modifier.height(10.dp))
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
             Panel {
                 Text("FSRS optimizer", style = MaterialTheme.typography.headlineSmall, color = MnemoColors.text)
                 Text(
-                    "Fits the scheduler's parameters to your own review history. Needs 400+ reviews; arrives in Phase 5. You have ${d.totalReviews}.",
+                    "Fits the 21 scheduler weights to your own review history by replaying it and minimising prediction error. " +
+                        "Needs ${FsrsOptimizer.MIN_REVIEWS}+ reviews; you have ${d.totalReviews}." +
+                        if (graph.usesCustomParameters) " Custom weights are in use." else " Using the published defaults.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MnemoColors.text2,
                 )
                 Spacer(Modifier.height(10.dp))
-                MnemoButton("Optimize parameters", onClick = {}, enabled = false)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MnemoButton(
+                        if (optimizing) "Optimizing…" else "Optimize parameters",
+                        enabled = !optimizing && d.totalReviews >= FsrsOptimizer.MIN_REVIEWS,
+                        primary = true,
+                        onClick = {
+                            optimizing = true
+                            scope.launch {
+                                val result =
+                                    withContext(Dispatchers.Default) {
+                                        val reviews =
+                                            graph.reviewLogs
+                                                .since(
+                                                    0,
+                                                ).map { FsrsOptimizer.Review(it.cardId, it.rating, it.reviewedAt) }
+                                        FsrsOptimizer.optimize(reviews)
+                                    }
+                                graph.setParameters(result.parameters)
+                                val pct = ((1 - result.lossAfter / result.lossBefore) * 100).roundToInt()
+                                optimizeMessage =
+                                    "Fitted on ${result.reviewsUsed} reviews · prediction error " +
+                                    "${fmt3(
+                                        result.lossBefore,
+                                    )} → ${fmt3(result.lossAfter)} ($pct% better). New intervals apply from your next review."
+                                optimizing = false
+                            }
+                        },
+                    )
+                    if (graph.usesCustomParameters) {
+                        MnemoButton("Reset to defaults", onClick = {
+                            graph.setParameters(null)
+                            optimizeMessage = "Back to the published FSRS-6 defaults."
+                        })
+                    }
+                }
+                optimizeMessage?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MnemoColors.success)
+                }
             }
             Spacer(Modifier.height(32.dp))
         }

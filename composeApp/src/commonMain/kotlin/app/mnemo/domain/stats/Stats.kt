@@ -18,13 +18,26 @@ fun localDate(epochMillis: Long): LocalDate =
         .toLocalDateTime(TimeZone.currentSystemDefault())
         .date
 
-/** Start of the local day containing [epochMillis]. */
+/**
+ * Start of the local day containing [epochMillis]. This is *the* day boundary:
+ * daily limits, "bury until tomorrow", the forecast and streaks all use it, so
+ * a day never silently means "UTC day" in one place and "local day" in another.
+ */
+fun startOfLocalDay(epochMillis: Long): Long = startOfLocalDay(localDate(epochMillis))
+
+/** Start of [date] in the local time zone (DST-safe, unlike adding 24h). */
 @OptIn(ExperimentalTime::class)
-fun startOfLocalDay(epochMillis: Long): Long {
-    val tz = TimeZone.currentSystemDefault()
-    val date = localDate(epochMillis)
-    return LocalDateTime(date, LocalTime(0, 0)).toInstant(tz).toEpochMilliseconds()
-}
+fun startOfLocalDay(date: LocalDate): Long =
+    LocalDateTime(date, LocalTime(0, 0)).toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
+
+/** Start of the local day after the one containing [epochMillis]: when a buried card comes back. */
+fun nextLocalDayStart(epochMillis: Long): Long = startOfLocalDay(localDate(epochMillis).plusDays(1))
+
+/** Start of the local day [daysAhead] days after the one containing [epochMillis]. */
+fun startOfLocalDayPlus(
+    epochMillis: Long,
+    daysAhead: Int,
+): Long = startOfLocalDay(localDate(epochMillis).plusDays(daysAhead))
 
 /** Consecutive days (ending today or yesterday) with at least one review. */
 fun streak(

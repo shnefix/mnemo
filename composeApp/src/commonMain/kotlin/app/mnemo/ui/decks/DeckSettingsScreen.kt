@@ -68,7 +68,18 @@ fun DeckSettingsScreen(
             Spacer(Modifier.width(14.dp))
             Column {
                 Text("Deck settings", style = MaterialTheme.typography.labelLarge, color = MnemoColors.text2)
-                Text(deck?.path ?: "", style = MaterialTheme.typography.headlineLarge, color = MnemoColors.text)
+                Text(
+                    deck?.path ?: "",
+                    style =
+                        if (LocalWindowSize.current ==
+                            WindowSize.Compact
+                        ) {
+                            MaterialTheme.typography.headlineSmall
+                        } else {
+                            MaterialTheme.typography.headlineLarge
+                        },
+                    color = MnemoColors.text,
+                )
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -131,6 +142,28 @@ fun DeckSettingsScreen(
                         Text("Also suspend leeches", style = MaterialTheme.typography.bodyMedium, color = MnemoColors.text)
                     }
                 }
+            }
+            Panel {
+                Eyebrow("Knowledge graph")
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = s.gatePrerequisites,
+                        onCheckedChange = { s = s.copy(gatePrerequisites = it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MnemoColors.onCoral, checkedTrackColor = MnemoColors.coral),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Hold new cards until their prerequisite concepts reach 70%",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MnemoColors.text,
+                    )
+                }
+                Text(
+                    "Uses the prerequisite links you set on the Graph page. Cards not linked to any concept are never held.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MnemoColors.text2,
+                )
             }
             Panel {
                 Eyebrow("Review mode")

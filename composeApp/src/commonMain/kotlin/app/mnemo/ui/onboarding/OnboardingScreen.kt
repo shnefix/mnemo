@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.mnemo.LocalAppGraph
 import app.mnemo.di.AppGraph
@@ -179,7 +180,13 @@ fun OnboardingScreen(onDone: () -> Unit) {
                                 }.padding(16.dp),
                             verticalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Text(s.label, style = MaterialTheme.typography.titleLarge, color = MnemoColors.onLime)
+                            Text(
+                                s.label,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MnemoColors.onLime,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                             Text(
                                 "${s.cards.size} starter cards",
                                 style = MaterialTheme.typography.labelMedium,

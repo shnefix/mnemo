@@ -46,6 +46,7 @@ enum class NoteKind(
     Reversed("reversed", "Basic + Reversed"),
     Cloze("cloze", "Cloze"),
     TypeAnswer("type", "Type the answer"),
+    Vocab("vocab", "Vocabulary"),
     ;
 
     companion object {
@@ -81,6 +82,8 @@ data class DeckSettings(
     val mode: ReviewMode = ReviewMode.Classic,
     val language: String? = null,
     val varyQuestions: Boolean = false,
+    /** Hold new cards whose concept prerequisites are below 70% mastery. */
+    val gatePrerequisites: Boolean = false,
     val maximumIntervalDays: Int = 36_500,
 )
 

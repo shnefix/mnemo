@@ -202,11 +202,11 @@ class ScreenshotTest {
             render("graph-$tag", w, h, g) { Shell(NavSection.Graph) { GraphScreen({}) } }
             render("stats-$tag", w, h, g) { Shell(NavSection.Stats) { StatsScreen({}) } }
             render("settings-$tag", w, h, g) { Shell(null) { SettingsScreen() } }
-            render("review-$tag", w, h, g) { ReviewScreen(null, {}, {}) }
+            render("review-$tag", w, h, g) { ReviewScreen(null, onExit = {}, onEdit = {}) }
             render("editor-$tag", w, h, g) { NoteEditorScreen(null, null, {}) }
             render("onboarding-$tag", w, h, g) { OnboardingScreen({}) }
         }
         render("today-light", desktop.first, desktop.second, g, ThemeMode.Light) { Shell(NavSection.Today) { TodayScreen({}, {}, {}, {}) } }
-        render("review-light", phone.first, phone.second, g, ThemeMode.Light) { ReviewScreen(null, {}, {}) }
+        render("review-light", phone.first, phone.second, g, ThemeMode.Light) { ReviewScreen(null, onExit = {}, onEdit = {}) }
     }
 }

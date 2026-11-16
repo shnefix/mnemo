@@ -94,7 +94,7 @@ fun App(
                                 onReview = { nav.navigate(Route.Review(it)) },
                                 onAddCards = { nav.navigate(Route.Editor()) },
                                 onDecks = { nav.navigate(Route.Decks) { launchSingleTop = true } },
-                                onWeakSpots = { nav.navigate(Route.Graph) { launchSingleTop = true } },
+                                onWeakSpots = { nav.navigate(Route.Review(weak = true)) },
                             )
                         }
                         composable<Route.Decks> {
@@ -102,6 +102,8 @@ fun App(
                                 onReview = { nav.navigate(Route.Review(it)) },
                                 onAddCards = { nav.navigate(Route.Editor(deckId = it)) },
                                 onSettings = { nav.navigate(Route.DeckSettings(it)) },
+                                onBrowse = { nav.navigate(Route.Browse) },
+                                onAppSettings = { nav.navigate(Route.Settings) },
                             )
                         }
                         composable<Route.Browse> {
@@ -110,13 +112,19 @@ fun App(
                                 onAdd = { nav.navigate(Route.Editor()) },
                             )
                         }
-                        composable<Route.Graph> { GraphScreen(onEditCard = { nav.navigate(Route.Editor(noteId = it)) }) }
+                        composable<Route.Graph> {
+                            GraphScreen(
+                                onEditCard = { nav.navigate(Route.Editor(noteId = it)) },
+                                onWeakSpots = { nav.navigate(Route.Review(weak = true)) },
+                            )
+                        }
                         composable<Route.Stats> { StatsScreen(onEdit = { nav.navigate(Route.Editor(noteId = it)) }) }
                         composable<Route.Settings> { SettingsScreen() }
                         composable<Route.Review> { entry ->
                             val route = entry.toRoute<Route.Review>()
                             ReviewScreen(
                                 deckId = route.deckId,
+                                weak = route.weak,
                                 onExit = { if (!nav.popBackStack()) goHome() },
                                 onEdit = { nav.navigate(Route.Editor(noteId = it)) },
                             )

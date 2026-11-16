@@ -60,10 +60,11 @@ private var player: MediaPlayer? = null
 actual fun playAudio(path: String) {
     runCatching {
         player?.release()
-        player = MediaPlayer().apply {
-            setDataSource(path)
-            prepare()
-            start()
-        }
+        player =
+            MediaPlayer().apply {
+                setDataSource(path)
+                prepare()
+                start()
+            }
     }
 }
