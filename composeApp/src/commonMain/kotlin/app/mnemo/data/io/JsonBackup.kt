@@ -214,6 +214,23 @@ object JsonBackup {
     suspend fun restore(
         graph: AppGraph,
         text: String,
+    ): Int = restoreOrMerge(graph, text, merge = false)
+
+    /**
+     * Sync with another device's backup: notes that already exist here (same deck and
+     * creation time, which restores preserve) are updated instead of duplicated. The newer
+     * edit wins for fields, the more recently reviewed side wins for scheduling, and review
+     * history is unioned. Returns how many notes were added or changed.
+     */
+    suspend fun merge(
+        graph: AppGraph,
+        text: String,
+    ): Int = restoreOrMerge(graph, text, merge = true)
+
+    private suspend fun restoreOrMerge(
+        graph: AppGraph,
+        text: String,
+        merge: Boolean,
     ): Int =
         withContext(Dispatchers.IO) {
             val backup = json.decodeFromString<Backup>(text)
@@ -253,16 +270,69 @@ object JsonBackup {
                     pending = next
                 }
                 val noteMap = HashMap<Long, Long>()
+                val existingNotes =
+                    if (merge) {
+                        db.noteQueries
+                            .selectAll()
+                            .executeAsList()
+                            .associateBy { it.deck_id to it.created_at }
+                    } else {
+                        emptyMap()
+                    }
+                val mergedNotes = HashSet<Long>()
                 backup.notes.forEach { n ->
                     val deck = deckMap[n.deckId] ?: return@forEach
                     val type = typeMap[n.noteTypeId] ?: return@forEach
+                    val same = existingNotes[deck to n.createdAt]?.takeIf { it.note_type_id == type }
+                    if (same != null) {
+                        noteMap[n.id] = same.id
+                        mergedNotes += same.id
+                        if (n.updatedAt > same.updated_at) {
+                            db.noteQueries.update(deck, encodeFields(n.fields), encodeTags(n.tags), n.updatedAt, same.id)
+                            imported += 1
+                        }
+                        return@forEach
+                    }
                     db.noteQueries.insert(deck, type, encodeFields(n.fields), encodeTags(n.tags), null, n.createdAt, n.updatedAt)
                     noteMap[n.id] = db.noteQueries.lastInsertId().executeAsOne()
                     imported += 1
                 }
                 val cardMap = HashMap<Long, Long>()
+                val knownLogs = HashSet<Long>()
                 backup.cards.forEach { c ->
                     val note = noteMap[c.noteId] ?: return@forEach
+                    if (note in mergedNotes) {
+                        val local =
+                            db.cardQueries
+                                .selectByNote(note)
+                                .executeAsList()
+                                .firstOrNull { it.template_index == c.templateIndex }
+                        if (local != null) {
+                            cardMap[c.id] = local.id
+                            db.reviewLogQueries
+                                .byCard(local.id)
+                                .executeAsList()
+                                .forEach { knownLogs += it.reviewed_at * 31 + local.id }
+                            if ((c.lastReview ?: 0) > (local.last_review ?: 0)) {
+                                db.cardQueries.updateScheduling(
+                                    c.state,
+                                    c.due,
+                                    c.stability,
+                                    c.difficulty,
+                                    c.elapsedDays,
+                                    c.scheduledDays,
+                                    c.reps,
+                                    c.lapses,
+                                    c.lastReview,
+                                    c.learningStep,
+                                    local.id,
+                                )
+                                db.cardQueries.setSuspended(c.suspended, local.id)
+                                db.cardQueries.setBuried(c.buriedUntil, local.id)
+                            }
+                            return@forEach
+                        }
+                    }
                     db.cardQueries.insert(note, c.templateIndex, c.due)
                     val id = db.cardQueries.lastInsertId().executeAsOne()
                     cardMap[c.id] = id
@@ -284,6 +354,7 @@ object JsonBackup {
                 }
                 backup.reviewLogs.forEach { l ->
                     val card = cardMap[l.cardId] ?: return@forEach
+                    if (!knownLogs.add(l.reviewedAt * 31 + card)) return@forEach
                     db.reviewLogQueries.insert(
                         card,
                         l.rating,
@@ -306,9 +377,12 @@ object JsonBackup {
                     )
                 }
                 val conceptMap = HashMap<Long, Long>()
-                backup.concepts.forEach { c ->
-                    db.conceptQueries.insert(c.name, c.description)
-                    conceptMap[c.id] = db.conceptQueries.lastInsertId().executeAsOne()
+                // Concepts are only copied on a full restore; merging would duplicate them.
+                if (!merge) {
+                    backup.concepts.forEach { c ->
+                        db.conceptQueries.insert(c.name, c.description)
+                        conceptMap[c.id] = db.conceptQueries.lastInsertId().executeAsOne()
+                    }
                 }
                 backup.cardConcepts.forEach { cc ->
                     val card = cardMap[cc.cardId] ?: return@forEach
