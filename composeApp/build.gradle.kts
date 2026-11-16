@@ -102,6 +102,7 @@ kotlin {
                 implementation(compose.preview)
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.sqldelight.android.driver)
+                implementation("androidx.profileinstaller:profileinstaller:1.4.1")
             }
             // On-device tests (`./gradlew :composeApp:connectedDebugAndroidTest` with a phone attached).
             val androidInstrumentedTest by getting {
@@ -133,7 +134,14 @@ if (androidSdkPresent) {
             resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
         }
         buildTypes {
-            getByName("release") { isMinifyEnabled = false }
+            getByName("release") {
+                // R8 + resource shrinking: a debug build of Compose runs several times slower.
+                isMinifyEnabled = true
+                isShrinkResources = true
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+                // Signed with the debug key so it installs over the existing app and keeps its data.
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
         compileOptions {
             sourceCompatibility = JavaVersion.VERSION_21
