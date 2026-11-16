@@ -38,6 +38,15 @@ if (androidSdkPresent) {
 kotlin {
     jvmToolchain(21)
 
+    applyDefaultHierarchyTemplate {
+        common {
+            group("jvmShared") {
+                withJvm()
+                withAndroidTarget()
+            }
+        }
+    }
+
     jvm("desktop")
 
     if (androidSdkPresent) {
@@ -49,12 +58,9 @@ kotlin {
     sourceSets {
         val desktopMain by getting
         // Code shared by every JVM-based target (desktop + Android): zip, zstd, java.io.
-        val jvmShared by creating {
-            dependsOn(commonMain.get())
+        val jvmSharedMain by getting {
             dependencies { implementation(libs.zstd.jni) }
         }
-        desktopMain.dependsOn(jvmShared)
-        if (androidSdkPresent) androidMain.get().dependsOn(jvmShared)
 
         commonMain.dependencies {
             implementation(compose.runtime)
