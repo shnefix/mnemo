@@ -21,10 +21,13 @@ import app.mnemo.ui.graph.GraphScreen
 import app.mnemo.ui.nav.AdaptiveScaffold
 import app.mnemo.ui.nav.NavSection
 import app.mnemo.ui.nav.WindowSizeProvider
+import app.mnemo.ui.onboarding.OnboardingScreen
 import app.mnemo.ui.review.ReviewScreen
 import app.mnemo.ui.settings.SettingsScreen
 import app.mnemo.ui.stats.StatsScreen
 import app.mnemo.ui.theme.MnemoTheme
+import app.mnemo.ui.theme.ThemeMode
+import app.mnemo.ui.theme.ThemeState
 import app.mnemo.ui.today.TodayScreen
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.EncodedImageFormat
@@ -153,12 +156,13 @@ class ScreenshotTest {
         width: Int,
         height: Int,
         graph: AppGraph,
+        mode: ThemeMode = ThemeMode.Dark,
         content: @Composable () -> Unit,
     ) {
         val scene =
             ImageComposeScene(width = width, height = height, density = Density(1f)) {
                 CompositionLocalProvider(LocalAppGraph provides graph) {
-                    MnemoTheme { WindowSizeProvider(content) }
+                    MnemoTheme(themeState = ThemeState(mode)) { WindowSizeProvider(content) }
                 }
             }
         try {
@@ -200,6 +204,9 @@ class ScreenshotTest {
             render("settings-$tag", w, h, g) { Shell(null) { SettingsScreen() } }
             render("review-$tag", w, h, g) { ReviewScreen(null, {}, {}) }
             render("editor-$tag", w, h, g) { NoteEditorScreen(null, null, {}) }
+            render("onboarding-$tag", w, h, g) { OnboardingScreen({}) }
         }
+        render("today-light", desktop.first, desktop.second, g, ThemeMode.Light) { Shell(NavSection.Today) { TodayScreen({}, {}, {}, {}) } }
+        render("review-light", phone.first, phone.second, g, ThemeMode.Light) { ReviewScreen(null, {}, {}) }
     }
 }

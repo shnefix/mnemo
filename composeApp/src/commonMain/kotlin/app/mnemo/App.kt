@@ -3,7 +3,11 @@ package app.mnemo
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
@@ -12,6 +16,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.mnemo.di.AppGraph
+import app.mnemo.platform.Prefs
 import app.mnemo.ui.browse.BrowseScreen
 import app.mnemo.ui.decks.DeckListScreen
 import app.mnemo.ui.decks.DeckSettingsScreen
@@ -21,18 +26,38 @@ import app.mnemo.ui.nav.AdaptiveScaffold
 import app.mnemo.ui.nav.NavSection
 import app.mnemo.ui.nav.Route
 import app.mnemo.ui.nav.WindowSizeProvider
+import app.mnemo.ui.onboarding.OnboardingScreen
 import app.mnemo.ui.review.ReviewScreen
 import app.mnemo.ui.settings.SettingsScreen
 import app.mnemo.ui.stats.StatsScreen
 import app.mnemo.ui.theme.MnemoTheme
+import app.mnemo.ui.theme.ThemeState
 import app.mnemo.ui.today.TodayScreen
 
 val LocalAppGraph = staticCompositionLocalOf<AppGraph> { error("AppGraph not provided") }
 
 @Composable
-fun App(graph: AppGraph) {
+fun App(
+    graph: AppGraph,
+    themeState: ThemeState? = null,
+) {
     CompositionLocalProvider(LocalAppGraph provides graph) {
-        MnemoTheme {
+        MnemoTheme(themeState = themeState) {
+            // First launch: ask what the user is learning before showing the app.
+            var onboarded by remember { mutableStateOf(Prefs.get(Prefs.ONBOARDED) == "1") }
+            var checked by remember { mutableStateOf(onboarded) }
+            LaunchedEffect(Unit) {
+                if (!onboarded && graph.decks.count() > 0L) {
+                    Prefs.set(Prefs.ONBOARDED, "1")
+                    onboarded = true
+                }
+                checked = true
+            }
+            if (!checked) return@MnemoTheme
+            if (!onboarded) {
+                OnboardingScreen(onDone = { onboarded = true })
+                return@MnemoTheme
+            }
             WindowSizeProvider {
                 val nav = rememberNavController()
                 val backStack by nav.currentBackStackEntryAsState()

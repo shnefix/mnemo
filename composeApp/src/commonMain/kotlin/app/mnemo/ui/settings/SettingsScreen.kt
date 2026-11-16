@@ -23,11 +23,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.mnemo.LocalAppGraph
+import app.mnemo.data.io.ApkgImporter
 import app.mnemo.data.io.CsvImporter
 import app.mnemo.data.io.JsonBackup
 import app.mnemo.domain.model.Deck
-import app.mnemo.platform.FileIo
 import app.mnemo.platform.appDataDir
+import app.mnemo.platform.rememberFilePicker
+import app.mnemo.platform.saveTextFile
 import app.mnemo.ui.components.Eyebrow
 import app.mnemo.ui.components.MnemoButton
 import app.mnemo.ui.components.MnemoIcons
@@ -35,9 +37,12 @@ import app.mnemo.ui.components.MnemoSelect
 import app.mnemo.ui.components.MnemoTextField
 import app.mnemo.ui.components.Panel
 import app.mnemo.ui.components.ScreenHeader
+import app.mnemo.ui.components.Segmented
 import app.mnemo.ui.nav.LocalWindowSize
 import app.mnemo.ui.nav.WindowSize
+import app.mnemo.ui.theme.LocalThemeMode
 import app.mnemo.ui.theme.MnemoColors
+import app.mnemo.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
 @Composable
@@ -45,10 +50,12 @@ fun SettingsScreen() {
     val graph = LocalAppGraph.current
     val scope = rememberCoroutineScope()
     val compact = LocalWindowSize.current == WindowSize.Compact
+    val theme = LocalThemeMode.current
     var decks by remember { mutableStateOf<List<Deck>>(emptyList()) }
     var importDeck by remember { mutableStateOf<Deck?>(null) }
     var pasted by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
     var counts by remember { mutableStateOf("") }
 
     suspend fun refresh() {
@@ -59,7 +66,7 @@ fun SettingsScreen() {
     }
     LaunchedEffect(Unit) { refresh() }
 
-    fun runImport(text: String) {
+    fun runCsv(text: String) {
         val deck =
             importDeck ?: run {
                 message = "Create a deck first."
@@ -75,12 +82,85 @@ fun SettingsScreen() {
         }
     }
 
+    val pickApkg =
+        rememberFilePicker(listOf("apkg", "colpkg")) { file ->
+            if (file == null) {
+                message = "No file chosen"
+                return@rememberFilePicker
+            }
+            busy = true
+            message = "Importing ${file.name}…"
+            scope.launch {
+                val result = runCatching { ApkgImporter.import(graph, file.bytes) }
+                message =
+                    result.fold(
+                        { r ->
+                            "Imported ${r.notes} notes, ${r.cards} cards, ${r.reviews} reviews, " +
+                                "${r.media} media files into ${r.decks} decks" +
+                                (if (r.skippedNotes > 0) " · ${r.skippedNotes} notes skipped (already imported or empty)" else "") +
+                                (if (r.warnings.isNotEmpty()) "\n" + r.warnings.joinToString("\n") else "")
+                        },
+                        { "Import failed: ${it.message}" },
+                    )
+                busy = false
+                refresh()
+            }
+        }
+    val pickCsv =
+        rememberFilePicker(listOf("csv", "txt", "tsv")) { file ->
+            if (file ==
+                null
+            ) {
+                message = "No file chosen"
+            } else {
+                runCsv(file.text)
+            }
+        }
+    val pickJson =
+        rememberFilePicker(listOf("json")) { file ->
+            if (file == null) {
+                message = "No file chosen"
+                return@rememberFilePicker
+            }
+            scope.launch {
+                val n = runCatching { JsonBackup.restore(graph, file.text) }
+                message = n.fold({ "Restored $it notes" }, { "Restore failed: ${it.message}" })
+                refresh()
+            }
+        }
+
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = if (compact) 20.dp else 40.dp, vertical = 28.dp),
     ) {
         ScreenHeader(title = "Settings", subtitle = counts)
         Spacer(Modifier.height(20.dp))
         Column(Modifier.widthIn(max = 720.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Panel {
+                Eyebrow("Appearance")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = listOf("OLED dark", "Light", "System"),
+                    selected = theme.mode.ordinal,
+                    onSelect = { theme.set(ThemeMode.entries[it]) },
+                )
+            }
+            Panel {
+                Eyebrow("Import an Anki deck")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Any .apkg: shared decks from AnkiWeb or your own export. Decks, notes, cards, scheduling, review history and media come across. Re-importing the same deck skips notes you already have.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MnemoColors.text2,
+                )
+                Spacer(Modifier.height(12.dp))
+                MnemoButton(
+                    if (busy) "Importing…" else "Choose .apkg file…",
+                    icon = MnemoIcons.Import,
+                    primary = true,
+                    enabled = !busy,
+                    onClick = pickApkg,
+                )
+            }
             Panel {
                 Eyebrow("Import CSV")
                 Spacer(Modifier.height(6.dp))
@@ -98,20 +178,13 @@ fun SettingsScreen() {
                     onSelect = { importDeck = it },
                 )
                 Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MnemoButton("Choose CSV file…", icon = MnemoIcons.Import, primary = true, onClick = {
-                        scope.launch {
-                            val text = FileIo.openText(listOf("csv", "txt", "tsv"))
-                            if (text == null) message = "No file chosen (on Android, paste the text below)." else runImport(text)
-                        }
-                    })
-                }
+                MnemoButton("Choose CSV file…", icon = MnemoIcons.Import, onClick = pickCsv)
                 Spacer(Modifier.height(12.dp))
                 MnemoTextField(value = pasted, onValueChange = {
                     pasted = it
                 }, label = "…or paste CSV text", minLines = 4, placeholder = "der Hund,the dog,a1 noun")
                 Spacer(Modifier.height(8.dp))
-                MnemoButton("Import pasted text", enabled = pasted.isNotBlank(), onClick = { runImport(pasted) })
+                MnemoButton("Import pasted text", enabled = pasted.isNotBlank(), onClick = { runCsv(pasted) })
             }
             Panel {
                 Eyebrow("Backup")
@@ -126,22 +199,11 @@ fun SettingsScreen() {
                     MnemoButton("Export JSON backup", icon = MnemoIcons.Export, onClick = {
                         scope.launch {
                             val text = JsonBackup.export(graph)
-                            val path = FileIo.saveText("mnemo-backup.json", text)
+                            val path = saveTextFile("mnemo-backup.json", text)
                             message = if (path != null) "Backup written to $path" else "Export cancelled"
                         }
                     })
-                    MnemoButton("Restore from JSON…", onClick = {
-                        scope.launch {
-                            val text = FileIo.openText(listOf("json"))
-                            if (text == null) {
-                                message = "No file chosen"
-                            } else {
-                                val n = runCatching { JsonBackup.restore(graph, text) }
-                                message = n.fold({ "Restored $it notes" }, { "Restore failed: ${it.message}" })
-                                refresh()
-                            }
-                        }
-                    })
+                    MnemoButton("Restore from JSON…", onClick = pickJson)
                 }
             }
             Panel {
@@ -157,7 +219,7 @@ fun SettingsScreen() {
                 Eyebrow("About")
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Mnemo 0.1.0 · Phase 1 (Anki parity). Scheduler: FSRS-6 default parameters.",
+                    "Mnemo 0.2.0 · Phase 2. Scheduler: FSRS-6 default parameters.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MnemoColors.text2,
                 )

@@ -4,9 +4,10 @@ A spaced-repetition app that keeps Anki's proven scheduling and adds AI that cre
 grades and connects your cards. Kotlin + Compose Multiplatform, one codebase for Android
 and desktop, local-first SQLite, OLED-dark UI.
 
-**Status: Phase 1 (Anki parity, no AI).** Decks, four note types, FSRS scheduling with
+**Status: Phase 2 (Anki import + polish).** Decks, four note types, FSRS scheduling with
 learning steps, review with undo/keyboard shortcuts/swipe, Browse with search, Today
-dashboard, Stats, a manual knowledge graph, CSV import and JSON backup. See
+dashboard, Stats, a manual knowledge graph, `.apkg` import with media and review history,
+CSV import, JSON backup, onboarding, OLED dark / light themes. See
 [PROGRESS.md](PROGRESS.md) for what's next.
 
 ## Run it
@@ -44,7 +45,8 @@ make android    # ./gradlew :composeApp:assembleDebug
   is:leech "phrase" -excluded`; multi-select for tag/move/suspend/reset/delete.
 - **Graph**: create concepts, link cards, connect concepts (related / prerequisite / part
   of). Node color = mean recall probability of its cards.
-- **Settings**: CSV import (`front,back,tags`), JSON backup export/restore.
+- **Settings**: Anki `.apkg` import (decks, cards, scheduling, review history, media),
+  CSV import (`front,back,tags`), JSON backup export/restore, theme (OLED dark / light / system).
 
 ## Scheduling
 

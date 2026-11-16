@@ -34,9 +34,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.mnemo.ui.theme.MnemoColors
 import app.mnemo.ui.theme.masteryColor
-import com.mikepenz.markdown.m3.Markdown
-import com.mikepenz.markdown.m3.markdownColor
-import com.mikepenz.markdown.m3.markdownTypography
 
 /** A raised surface on the black ground. */
 @Composable
@@ -326,20 +323,6 @@ fun Eyebrow(
     color: Color = MnemoColors.text2,
 ) {
     Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.Bold)
-}
-
-/** Renders light Markdown (bold, italic, code, lists) with the app's colors. */
-@Composable
-fun MarkdownText(
-    text: String,
-    modifier: Modifier = Modifier,
-) {
-    Markdown(
-        content = text,
-        colors = markdownColor(text = MnemoColors.text),
-        typography = markdownTypography(),
-        modifier = modifier,
-    )
 }
 
 @Composable

@@ -8,6 +8,7 @@ import app.mnemo.data.db.DriverFactory
 import app.mnemo.di.AppGraph
 import app.mnemo.platform.appContext
 import app.mnemo.platform.appDataDir
+import app.mnemo.ui.theme.ThemeState
 import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
@@ -19,7 +20,7 @@ class MainActivity : ComponentActivity() {
             runBlocking { it.seed() }
             graphHolder = it
         }
-        setContent { App(graph) }
+        setContent { App(graph, ThemeState.fromPrefs()) }
     }
 
     companion object {

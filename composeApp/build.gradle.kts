@@ -48,6 +48,13 @@ kotlin {
 
     sourceSets {
         val desktopMain by getting
+        // Code shared by every JVM-based target (desktop + Android): zip, zstd, java.io.
+        val jvmShared by creating {
+            dependsOn(commonMain.get())
+            dependencies { implementation(libs.zstd.jni) }
+        }
+        desktopMain.dependsOn(jvmShared)
+        if (androidSdkPresent) androidMain.get().dependsOn(jvmShared)
 
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -149,4 +156,15 @@ ktlint {
     filter {
         exclude { it.file.path.contains("/build/") }
     }
+}
+
+// Tests write media/prefs into a scratch folder, never the user's data dir.
+tasks.withType<Test>().configureEach {
+    systemProperty(
+        "mnemo.dataDir",
+        layout.buildDirectory
+            .dir("test-data")
+            .get()
+            .asFile.absolutePath,
+    )
 }

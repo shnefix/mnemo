@@ -10,12 +10,14 @@ import androidx.compose.ui.window.rememberWindowState
 import app.mnemo.data.db.DriverFactory
 import app.mnemo.di.AppGraph
 import app.mnemo.platform.appDataDir
+import app.mnemo.ui.theme.ThemeState
 import kotlinx.coroutines.runBlocking
 
 fun main() {
     val dbPath = System.getenv("MNEMO_DB") ?: (appDataDir() + "/mnemo.db")
     val graph = AppGraph.create(DriverFactory(), dbPath)
     runBlocking { graph.seed() }
+    val theme = ThemeState.fromPrefs()
 
     application {
         val state =
@@ -24,7 +26,7 @@ fun main() {
                 position = WindowPosition.Aligned(Alignment.Center),
             )
         Window(onCloseRequest = ::exitApplication, title = "Mnemo", state = state) {
-            App(graph)
+            App(graph, theme)
         }
     }
 }

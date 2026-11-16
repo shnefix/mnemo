@@ -3,6 +3,7 @@ package app.mnemo.platform
 import java.io.File
 
 actual fun appDataDir(): String {
+    (System.getProperty("mnemo.dataDir") ?: System.getenv("MNEMO_DATA_DIR"))?.let { return File(it).apply { mkdirs() }.absolutePath }
     val os = System.getProperty("os.name").lowercase()
     val home = System.getProperty("user.home")
     val base =

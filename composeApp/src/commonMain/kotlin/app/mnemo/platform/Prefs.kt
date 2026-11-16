@@ -1,0 +1,49 @@
+package app.mnemo.platform
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+/** Reads/writes a small text file in the app data folder (used for preferences). */
+expect fun readAppFile(name: String): String?
+
+expect fun writeAppFile(
+    name: String,
+    text: String,
+)
+
+/** Tiny key/value preferences stored as `prefs.json` in the app data folder. */
+object Prefs {
+    private const val FILE = "prefs.json"
+    private var cache: MutableMap<String, String>? = null
+
+    private fun load(): MutableMap<String, String> =
+        cache ?: run {
+            val map =
+                runCatching {
+                    readAppFile(FILE)?.let { Json.parseToJsonElement(it).jsonObject.mapValues { (_, v) -> v.jsonPrimitive.content } }
+                }.getOrNull()?.toMutableMap() ?: mutableMapOf()
+            cache = map
+            map
+        }
+
+    fun get(key: String): String? = load()[key]
+
+    fun set(
+        key: String,
+        value: String,
+    ) {
+        val map = load()
+        map[key] = value
+        runCatching {
+            writeAppFile(
+                FILE,
+                Json.encodeToString(kotlinx.serialization.json.JsonObject(map.mapValues { JsonPrimitive(it.value) })),
+            )
+        }
+    }
+
+    const val THEME = "theme"
+    const val ONBOARDED = "onboarded"
+}

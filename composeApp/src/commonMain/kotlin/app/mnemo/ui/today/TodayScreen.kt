@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -413,9 +414,9 @@ private fun DarkButton(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        Text(text, style = MaterialTheme.typography.titleMedium, color = MnemoColors.text)
+        Text(text, style = MaterialTheme.typography.titleMedium, color = Color(0xFFF2F3F7))
         Spacer(Modifier.width(10.dp))
-        Icon(MnemoIcons.ArrowRight, contentDescription = null, tint = MnemoColors.text, modifier = Modifier.size(18.dp))
+        Icon(MnemoIcons.ArrowRight, contentDescription = null, tint = Color(0xFFF2F3F7), modifier = Modifier.size(18.dp))
     }
 }
 
@@ -445,7 +446,7 @@ private fun Head(
 @Composable
 private fun Num(
     text: String,
-    color: androidx.compose.ui.graphics.Color,
+    color: Color,
 ) {
     Text(text, style = MaterialTheme.typography.labelLarge, color = color, modifier = Modifier.width(64.dp))
 }
