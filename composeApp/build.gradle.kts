@@ -146,6 +146,10 @@ sqldelight {
     databases {
         create("MnemoDatabase") {
             packageName.set("app.mnemo.db")
+            // Schema snapshots live next to the .sq files; every schema change needs a
+            // migration (`<version>.sqm`) and a new snapshot (`generateCommonMainMnemoDatabaseSchema`).
+            schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
+            verifyMigrations.set(true)
         }
     }
 }

@@ -67,6 +67,15 @@ composeApp/src/commonMain/sqldelight/   schema + queries
 composeApp/src/commonTest, desktopTest/ tests
 ```
 
+## Database migrations
+
+The schema is `composeApp/src/commonMain/sqldelight/**/*.sq`; `databases/<n>.db` are
+snapshots of every released schema version and `verifyMigrations` runs against them.
+To change the schema: edit the `.sq` files, add `src/commonMain/sqldelight/<n>.sqm`
+with the `ALTER`/`CREATE` statements that take version `n` to `n+1`, then run
+`./gradlew :composeApp:generateCommonMainMnemoDatabaseSchema` to write the new snapshot.
+Both drivers apply pending migrations on open.
+
 ## AI
 
 Nothing in Phase 1 calls an AI provider. `.env.example` lists the keys later phases read;
