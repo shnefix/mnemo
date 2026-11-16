@@ -32,4 +32,11 @@ class ReminderTest {
         assertEquals("You have 1 card due", Reminder.message(1))
         assertEquals("You have 23 cards due", Reminder.message(23))
     }
+
+    @Test
+    fun messageMentionsStreakOnlyBeforeTodaysReview() {
+        assertEquals("You have 30 cards due · about 4 min. Keep your 5-day streak going!", Reminder.message(30, 5, false))
+        assertEquals("You have 30 cards due · about 4 min", Reminder.message(30, 5, true))
+        assertEquals("You have 1 card due · about 1 min", Reminder.message(1, 0, false))
+    }
 }

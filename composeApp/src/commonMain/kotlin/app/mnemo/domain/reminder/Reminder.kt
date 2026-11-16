@@ -1,6 +1,10 @@
 package app.mnemo.domain.reminder
 
 import app.mnemo.di.AppGraph
+import app.mnemo.domain.model.DAY_MS
+import app.mnemo.domain.stats.localDate
+import app.mnemo.domain.stats.reviewsByLocalDate
+import app.mnemo.domain.stats.streak
 import app.mnemo.platform.Prefs
 import app.mnemo.platform.ReminderScheduler
 import kotlinx.datetime.LocalDateTime
@@ -44,6 +48,28 @@ object Reminder {
     }
 
     fun message(due: Int): String = if (due == 1) "You have 1 card due" else "You have $due cards due"
+
+    /**
+     * The notification text, mentioning the streak when there is one: "Keep your 5-day
+     * streak going" if today has no review yet, plus an estimate of how long it takes.
+     */
+    fun message(
+        due: Int,
+        streak: Int,
+        reviewedToday: Boolean,
+    ): String {
+        val minutes = ((due * 8) / 60).coerceAtLeast(1)
+        val base = "${message(due)} · about $minutes min"
+        return if (streak > 0 && !reviewedToday) "$base. Keep your $streak-day streak going!" else base
+    }
+
+    /** Current streak and whether today already has a review. */
+    suspend fun streakInfo(graph: AppGraph): Pair<Int, Boolean> {
+        val now = graph.clock.now()
+        val days = reviewsByLocalDate(graph.reviewLogs.dailyCounts(now - 400 * DAY_MS)).keys
+        val today = localDate(now)
+        return streak(days, today) to (today in days)
+    }
 
     /** Cards due now across every deck, the same number the Today header shows. */
     suspend fun dueTotal(graph: AppGraph): Int {
