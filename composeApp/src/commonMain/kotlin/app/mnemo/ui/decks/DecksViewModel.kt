@@ -6,6 +6,7 @@ import app.mnemo.data.repo.DueCounts
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.model.Deck
 import app.mnemo.domain.model.DeckSettings
+import app.mnemo.domain.review.DailyQueue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,13 +43,19 @@ class DecksViewModel(
 
     private suspend fun rowsFor(decks: List<Deck>): List<DeckRow> {
         val now = graph.clock.now()
+        // One pass over the cards for every row (loading them all per deck was O(decks × cards)).
+        val cardsPerDeck =
+            graph.cards
+                .allViews()
+                .groupingBy { it.deckId }
+                .eachCount()
         return decks.map { deck ->
             val ids = graph.decks.subtreeIds(deck.id)
-            val due = graph.cards.dueCounts(ids, now, deck.settings.newPerDay, deck.settings.reviewsPerDay)
+            val due = DailyQueue.counts(graph, deck.id, now, decks)
             val review = graph.cards.reviewCards(ids)
             val scheduler = graph.scheduler(deck.settings)
             val mastery = if (review.isEmpty()) 0.0 else review.map { scheduler.retrievability(it, now) }.average()
-            val count = graph.cards.allViews().count { it.deckId in ids }
+            val count = ids.sumOf { cardsPerDeck[it] ?: 0 }
             DeckRow(deck = deck, depth = deck.path.count { it == ':' } / 2, due = due, cardCount = count, mastery = mastery)
         }
     }

@@ -2,12 +2,21 @@
 
 ## Done — Hardening (Nov 2026)
 
+- **Built-in English (B1–B2) deck** (`data/seed/`): installed once per install (flag
+  `seed.english`), ~500 notes in one transaction, split into packs of 10 under five sections.
+- **Daily limits** (`domain/review/DailyQueue.kt`): a deck's new-cards-per-day caps its subtree
+  and each sub-deck caps its share, Anki-style, so a parent deck gives a mix; "All decks" adds the
+  default limit on top. Today, Decks and Review share it, so their counts agree.
+- **Deck list**: parents start folded; opened decks are remembered (`decks.expanded`).
 - **Release signing**: `keystore.properties` (gitignored) points at a dedicated release key in
-  `~/.config/mnemo/release.jks`; without it release falls back to the debug key. Back the key up.
+  `~/.config/mnemo/release.jks`; without it, or with `make phone SIGN=debug`
+  (`-Pmnemo.signing=debug`), release uses the debug key. Back the key up. The Android version
+  code is the commit count. `make phone-test` runs the on-device tests without uninstalling.
 - **Sync**: notes carry a stable `uid` (schema v2, `1.sqm`), and deletions leave tombstones
   (`deleted_note`) that travel in backups, so deleted notes stay deleted and notes stamped with
   the same time (an `.apkg` import) no longer fold together. Old backups still match by deck +
-  creation time + fields. Review logs from both devices are unioned.
+  creation time + fields. Review logs from both devices are unioned. Tombstones older than 180
+  days are pruned at launch.
 - **Cards**: LaTeX (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`, `[$]…[/$]`) as Unicode math; fenced code is
   syntax-highlighted.
 - **Graph**: Neighbours / 2-steps focus around the selected concept; layout spreads large graphs.

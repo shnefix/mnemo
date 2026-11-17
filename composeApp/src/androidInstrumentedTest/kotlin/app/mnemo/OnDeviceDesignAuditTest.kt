@@ -224,15 +224,32 @@ class OnDeviceDesignAuditTest {
         if (problems.isNotEmpty()) fail("Design audit found ${problems.size} problem(s):\n" + problems.distinct().joinToString("\n"))
     }
 
+    /**
+     * Deletes every deck called [name] (this run's and any left by an earlier failed run) through
+     * the menu on that deck's own row. Never the first row's menu: that is one of the user's decks.
+     */
     private fun deleteDeck(name: String) {
         rule.waitUntil(15_000) { exists(hasContentDescription("Create cards")) }
         tap("Decks")
-        rule.waitUntil(15_000) { exists(hasText(name)) }
-        rule.onAllNodes(hasContentDescription("Deck menu")).onFirst().performClick()
-        rule.waitUntil(15_000) { exists(hasText("Delete")) }
-        rule.onNodeWithText("Delete").performClick()
-        rule.waitUntil(15_000) { exists(isDialog()) }
-        rule.onNode(hasText("Delete") and hasAnyAncestor(isDialog())).performClick()
-        rule.waitUntil(15_000) { !exists(hasText(name)) }
+        var rounds = 0
+        while (rounds++ < 5) {
+            val found =
+                runCatching {
+                    rule.waitUntil(15_000) {
+                        runCatching { rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name)) }.isSuccess
+                    }
+                }.isSuccess
+            if (!found) break
+            val row = rule.onAllNodes(hasText(name)).onFirst().fetchSemanticsNode().boundsInRoot
+            val menus = rule.onAllNodes(hasContentDescription("Deck menu"))
+            val onRow = menus.fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.top <= row.bottom && it.boundsInRoot.bottom >= row.top }
+            check(onRow >= 0) { "No menu button on the row of $name" }
+            menus[onRow].performClick()
+            rule.waitUntil(15_000) { exists(hasText("Delete")) }
+            rule.onNodeWithText("Delete").performClick()
+            rule.waitUntil(15_000) { exists(hasText("Delete “$name", substring = true) and hasAnyAncestor(isDialog())) }
+            rule.onNode(hasText("Delete") and hasAnyAncestor(isDialog())).performClick()
+            rule.waitUntil(15_000) { !exists(isDialog()) }
+        }
     }
 }

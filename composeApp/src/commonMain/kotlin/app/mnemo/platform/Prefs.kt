@@ -56,6 +56,7 @@ object Prefs {
     const val TEXT_SIZE = "text.size"
     const val ONBOARDED = "onboarded"
     const val ENGLISH_DECK = "seed.english"
+    const val DECKS_EXPANDED = "decks.expanded"
     const val FSRS_PARAMS = "fsrs.params"
     const val DAY_START_HOUR = "day.start.hour"
     const val REMINDER_HOUR = "reminder.hour"

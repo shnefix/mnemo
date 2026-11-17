@@ -80,6 +80,32 @@ class NoteRepository(
             noteId
         }
 
+    /** A note to add with [createMany]. */
+    data class NewNote(
+        val deckId: Long,
+        val noteType: NoteType,
+        val fields: Map<String, String>,
+        val tags: List<String>,
+    )
+
+    /**
+     * Creates many notes (and their cards) in one transaction: much faster than [create] in a
+     * loop, the database observers fire once, and an interrupted batch leaves nothing behind.
+     */
+    suspend fun createMany(items: List<NewNote>): Int =
+        withContext(Dispatchers.IO) {
+            if (items.isEmpty()) return@withContext 0
+            val now = clock.now()
+            db.transaction {
+                items.forEach { n ->
+                    notes.insert(n.deckId, n.noteType.id, encodeFields(n.fields), encodeTags(n.tags), null, now, now)
+                    val noteId = notes.lastInsertId().executeAsOne()
+                    CardGenerator.templateIndices(n.noteType, n.fields).forEach { idx -> cards.insert(noteId, idx.toLong(), now) }
+                }
+            }
+            items.size
+        }
+
     /** Updates fields/deck/tags and adds cards for new cloze numbers (never deletes reviewed cards). */
     suspend fun update(
         noteId: Long,
@@ -145,8 +171,18 @@ class NoteRepository(
 
     suspend fun countAll(): Long = withContext(Dispatchers.IO) { notes.countAll().executeAsOne() }
 
+    /**
+     * Forgets deletions older than [maxAgeMs] (default 180 days). Syncs carry tombstones so a
+     * deleted note stays deleted; a device last synced longer ago than this could bring one back.
+     */
+    suspend fun pruneTombstones(maxAgeMs: Long = TOMBSTONE_MAX_AGE_MS): Long =
+        withContext(Dispatchers.IO) { notes.pruneTombstones(clock.now() - maxAgeMs).value }
+
     suspend fun countByDeck(deckId: Long): Long = withContext(Dispatchers.IO) { notes.countByDeck(deckId).executeAsOne() }
 
     /** Every `source_id` in use (importers set one to recognise notes they created). */
     suspend fun existingSourceIds(): List<Long> = withContext(Dispatchers.IO) { notes.sourceIds().executeAsList().filterNotNull() }
 }
+
+/** How long deletions are remembered for sync (see [NoteRepository.pruneTombstones]). */
+const val TOMBSTONE_MAX_AGE_MS = 180L * 24 * 60 * 60 * 1000

@@ -84,3 +84,6 @@ INSERT OR REPLACE INTO deleted_note(uid, deleted_at) VALUES (?, ?);
 
 deleteByUid:
 DELETE FROM note WHERE uid = ?;
+
+pruneTombstones:
+DELETE FROM deleted_note WHERE deleted_at < ?;

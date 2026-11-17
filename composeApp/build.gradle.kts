@@ -120,6 +120,17 @@ kotlin {
     }
 }
 
+/** Commits on the current branch (1 in a shallow CI checkout); the Android version code. */
+val gitCommitCount: Int =
+    runCatching {
+        providers
+            .exec { commandLine("git", "rev-list", "--count", "HEAD") }
+            .standardOutput.asText
+            .get()
+            .trim()
+            .toInt()
+    }.getOrDefault(1)
+
 if (androidSdkPresent) {
     extensions.configure<com.android.build.api.dsl.ApplicationExtension>("android") {
         namespace = "app.mnemo"
@@ -128,17 +139,21 @@ if (androidSdkPresent) {
             applicationId = "app.mnemo"
             minSdk = 26
             targetSdk = 36
-            versionCode = 1
-            versionName = "0.1.0"
+            // One step per commit, so every build you install is newer than the last and the
+            // installed build can be told apart (`adb shell dumpsys package app.mnemo`).
+            versionCode = gitCommitCount
+            versionName = "0.1.$gitCommitCount"
             testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         }
         packaging {
             resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
         }
         // Release key: `keystore.properties` at the repo root (gitignored) points at the
-        // keystore. Without it (CI, fresh clone) release falls back to the debug key.
+        // keystore. Without it (CI, fresh clone), or with `-Pmnemo.signing=debug`, release uses
+        // the debug key, which updates a phone whose copy was installed with that key.
+        val forceDebugKey = providers.gradleProperty("mnemo.signing").orNull == "debug"
         val keystoreProps =
-            rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
+            rootProject.file("keystore.properties").takeIf { it.exists() && !forceDebugKey }?.let { f ->
                 Properties().also { p -> f.inputStream().use { p.load(it) } }
             }
         signingConfigs {

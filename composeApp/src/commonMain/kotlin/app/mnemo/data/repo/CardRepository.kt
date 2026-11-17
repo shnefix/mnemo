@@ -51,6 +51,30 @@ class CardRepository(
     suspend fun byNote(noteId: Long): List<Card> =
         withContext(Dispatchers.IO) { q.selectByNote(noteId).executeAsList().map { it.toDomain() } }
 
+    /** New, unsuspended, unburied cards whose notes sit directly in [deckIds], oldest first. */
+    suspend fun newCards(
+        deckIds: List<Long>,
+        now: Long,
+        limit: Int,
+    ): List<Card> =
+        withContext(Dispatchers.IO) {
+            if (deckIds.isEmpty() || limit <= 0) return@withContext emptyList()
+            q.newCards(deckIds, now, limit.toLong()).executeAsList().map { it.toDomain() }
+        }
+
+    /** Cards in [deckIds] seen for the first time since the start of the local day. */
+    suspend fun newIntroducedToday(
+        deckIds: List<Long>,
+        now: Long,
+    ): Int =
+        withContext(Dispatchers.IO) {
+            if (deckIds.isEmpty()) return@withContext 0
+            db.reviewLogQueries
+                .newIntroducedSince(deckIds, startOfLocalDay(now))
+                .executeAsOne()
+                .toInt()
+        }
+
     /** What is left of today's limits once the cards already introduced/reviewed today are subtracted. */
     private fun remainingToday(
         deckIds: List<Long>,

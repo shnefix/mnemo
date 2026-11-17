@@ -7,6 +7,7 @@ import app.mnemo.di.AppGraph
 import app.mnemo.domain.model.DAY_MS
 import app.mnemo.domain.model.Deck
 import app.mnemo.domain.model.DeckSettings
+import app.mnemo.domain.review.DailyQueue
 import app.mnemo.domain.stats.localDate
 import app.mnemo.domain.stats.reviewsByLocalDate
 import app.mnemo.domain.stats.streak
@@ -81,13 +82,12 @@ class TodayViewModel(
             val today = localDate(now)
             val decks = graph.decks.all()
             val allIds = decks.map { it.id }
-            // Same limits "Start review" uses for all decks, so the headline matches the session.
-            val defaults = DeckSettings()
-            val due = graph.cards.dueCounts(allIds, now, defaults.newPerDay, defaults.reviewsPerDay)
+            // Same queue "Start review" builds for all decks, so the headline matches the session.
+            val due = DailyQueue.counts(graph, null, now, decks)
             val rows =
                 decks.map { d ->
                     val ids = graph.decks.subtreeIds(d.id)
-                    val dueD = graph.cards.dueCounts(ids, now, d.settings.newPerDay, d.settings.reviewsPerDay)
+                    val dueD = DailyQueue.counts(graph, d.id, now, decks)
                     val review = graph.cards.reviewCards(ids)
                     val sched = graph.scheduler(d.settings)
                     val mastery = if (review.isEmpty()) 0.0 else review.map { sched.retrievability(it, now) }.average()

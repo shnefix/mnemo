@@ -60,6 +60,7 @@ fun App(
                 checked = true
                 // Daily safety net; never blocks the UI and never fails the launch.
                 runCatching { AutoBackup.runIfDue(graph) }
+                runCatching { graph.notes.pruneTombstones() }
             }
             // Everyone gets the built-in English deck once, in the background.
             LaunchedEffect(onboarded) {

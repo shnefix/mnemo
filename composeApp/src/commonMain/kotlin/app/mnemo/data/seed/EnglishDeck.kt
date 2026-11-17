@@ -1,5 +1,6 @@
 package app.mnemo.data.seed
 
+import app.mnemo.data.repo.NoteRepository
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.model.DeckSettings
 import app.mnemo.domain.model.NoteKind
@@ -37,7 +38,7 @@ object EnglishDeck {
 
     /** Adds every card; returns how many notes were created. */
     suspend fun install(graph: AppGraph): Int {
-        var count = 0
+        val batch = mutableListOf<NoteRepository.NewNote>()
         // Opening the whole English deck gives a small daily mix; opening one pack gives all of it.
         graph.decks.createByPath(ROOT, DeckSettings(newPerDay = 15, language = "en"))
 
@@ -53,12 +54,11 @@ object EnglishDeck {
             rows(text).chunked(PACK_SIZE).forEachIndexed { i, pack ->
                 val name = "$label ${(i + 1).toString().padStart(2, '0')}"
                 val deckId = graph.decks.createByPath("$ROOT::${s.name}::$name", DeckSettings(newPerDay = PACK_SIZE, language = "en"))
-                // Resumable: if the app was killed mid-install, the next launch finishes the pack
-                // (rows go in in order) instead of adding the same cards twice.
+                // Resumable: a pack that already has its cards (an earlier run whose flag was not
+                // saved) is skipped instead of filled twice.
                 val done = graph.notes.countByDeck(deckId).toInt()
                 pack.drop(done).forEach { row ->
-                    graph.notes.create(deckId, type, fields(row), listOf("english", s.tag))
-                    count++
+                    batch += NoteRepository.NewNote(deckId, type, fields(row), listOf("english", s.tag))
                 }
             }
         }
@@ -81,7 +81,8 @@ object EnglishDeck {
         packs(grammar, "Grammar", EnglishDeckContent.GRAMMAR, NoteKind.Cloze) { (text, extra) ->
             mapOf("Text" to text, "Extra" to extra)
         }
-        return count
+        // All cards go in as one transaction: a second or so on a phone, and all-or-nothing.
+        return graph.notes.createMany(batch)
     }
 
     /** Splits the `|`-separated content into rows; blank lines are skipped. */

@@ -83,32 +83,15 @@ class ReviewSession(
     suspend fun load(): Int {
         val now = graph.clock.now()
         val decks: List<Deck> = graph.decks.all()
-        val scope: List<Deck> =
-            if (deckId == null) {
-                decks
-            } else {
-                val ids = graph.decks.subtreeIds(deckId).toSet()
-                decks.filter { it.id in ids }
-            }
         decks.forEach { settingsByDeck[it.id] = it.settings }
         queue.clear()
         undoStack.clear()
-        // Limits come from the chosen deck (or defaults for "all decks").
-        val top = if (deckId != null) decks.firstOrNull { it.id == deckId } else null
-        val settings = top?.settings ?: DeckSettings()
+        // Daily limits: the chosen deck's (or defaults for "all decks"), each sub-deck capping its share.
         val cards =
             if (cardIds != null) {
                 cardIds.mapNotNull { graph.cards.byId(it) }.filter { !it.suspended }
             } else {
-                gate(
-                    graph.cards.dueQueue(
-                        deckIds = scope.map { it.id },
-                        now = now,
-                        newLimit = settings.newPerDay,
-                        reviewLimit = settings.reviewsPerDay,
-                    ),
-                    now,
-                )
+                gate(DailyQueue.cards(graph, deckId, now, decks), now)
             }
         queue.addAll(cards)
         total = cards.size

@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.mnemo.LocalAppGraph
+import app.mnemo.platform.Prefs
 import app.mnemo.ui.components.DueBar
 import app.mnemo.ui.components.EmptyState
 import app.mnemo.ui.components.IconActionButton
@@ -68,7 +69,18 @@ fun DeckListScreen(
     var renaming by remember { mutableStateOf<DeckRow?>(null) }
     var deleting by remember { mutableStateOf<DeckRow?>(null) }
     val compact = LocalWindowSize.current == WindowSize.Compact
-    var collapsed by remember { mutableStateOf(setOf<Long>()) }
+    // Parents start folded (the English deck alone has ~60 packs); what you open is remembered.
+    var expanded by remember { mutableStateOf(loadExpanded()) }
+    val collapsed =
+        state.rows
+            .map { it.deck.id }
+            .filter { it !in expanded }
+            .toSet()
+
+    fun setExpanded(ids: Set<Long>) {
+        expanded = ids
+        saveExpanded(ids)
+    }
     val collapsedPaths = state.rows.filter { it.deck.id in collapsed }.map { it.deck.path + "::" }
     val visibleRows = state.rows.filter { r -> collapsedPaths.none { r.deck.path.startsWith(it) } }
     val parentPaths =
@@ -92,15 +104,16 @@ fun DeckListScreen(
                     MnemoButton(
                         if (allCollapsed) "Show subdecks" else "Hide subdecks",
                         onClick = {
-                            collapsed =
+                            setExpanded(
                                 if (allCollapsed) {
-                                    emptySet()
-                                } else {
                                     state.rows
                                         .filter { it.deck.path in parentPaths }
                                         .map { it.deck.id }
                                         .toSet()
-                                }
+                                } else {
+                                    emptySet()
+                                },
+                            )
                         },
                     )
                 }
@@ -126,7 +139,7 @@ fun DeckListScreen(
                 row = row,
                 hasChildren = row.deck.path in parentPaths,
                 collapsed = row.deck.id in collapsed,
-                onToggle = { collapsed = if (row.deck.id in collapsed) collapsed - row.deck.id else collapsed + row.deck.id },
+                onToggle = { setExpanded(if (row.deck.id in expanded) expanded - row.deck.id else expanded + row.deck.id) },
                 onReview = { onReview(row.deck.id) },
                 onAddCards = { onAddCards(row.deck.id) },
                 onSettings = { onSettings(row.deck.id) },
@@ -336,3 +349,13 @@ fun DeckMiniRow(
         if (due > 0) Text("$due", style = MaterialTheme.typography.labelMedium, color = MnemoColors.text2)
     }
 }
+
+private fun loadExpanded(): Set<Long> =
+    Prefs
+        .get(Prefs.DECKS_EXPANDED)
+        .orEmpty()
+        .split(',')
+        .mapNotNull { it.trim().toLongOrNull() }
+        .toSet()
+
+private fun saveExpanded(ids: Set<Long>) = Prefs.set(Prefs.DECKS_EXPANDED, ids.sorted().joinToString(","))
