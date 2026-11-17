@@ -2,9 +2,11 @@ package app.mnemo.ui.graph
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.mnemo.data.seed.EnglishDeck
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.cards.CardGenerator
 import app.mnemo.domain.graph.ConceptSuggester
+import app.mnemo.domain.graph.DeckGraph
 import app.mnemo.domain.model.CardView
 import app.mnemo.domain.model.Concept
 import app.mnemo.domain.model.ConceptEdge
@@ -17,7 +19,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 data class GraphNode(
     val concept: Concept,
@@ -78,6 +79,11 @@ class GraphViewModel(
 
     fun reload() {
         viewModelScope.launch {
+            // New decks and cards join the graph on their own.
+            runCatching {
+                DeckGraph.sync(graph)
+                EnglishDeck.syncGraph(graph)
+            }
             val now = graph.clock.now()
             val concepts = graph.concepts.all()
             val links = graph.concepts.allLinks()
@@ -125,53 +131,21 @@ class GraphViewModel(
         }
     }
 
-    /** A few iterations of a spring layout in unit coordinates. */
+    /** Positions the nodes with [GraphFocus.forceLayout] (stable for any graph size). */
     private fun layout(
         nodes: List<GraphNode>,
         edges: List<ConceptEdge>,
     ) {
         if (nodes.size < 2) return
-        val byId = nodes.associateBy { it.concept.id }
-        // Weaker push per pair as the graph grows, so big graphs spread instead of piling on the walls.
-        val repulsion = 0.0025f * (12f / nodes.size.coerceAtLeast(12))
-        repeat(120) {
-            // repulsion
-            for (a in nodes) {
-                for (b in nodes) {
-                    if (a === b) continue
-                    var dx = a.x - b.x
-                    var dy = a.y - b.y
-                    var d2 = dx * dx + dy * dy
-                    if (d2 < 1e-4f) {
-                        dx = 0.01f
-                        dy = 0.01f
-                        d2 = 2e-4f
-                    }
-                    val f = repulsion / d2
-                    val d = sqrt(d2)
-                    a.x += dx / d * f
-                    a.y += dy / d * f
-                }
-            }
-            // attraction along edges
-            for (e in edges) {
-                val a = byId[e.fromId] ?: continue
-                val b = byId[e.toId] ?: continue
-                val dx = b.x - a.x
-                val dy = b.y - a.y
-                val d = sqrt(dx * dx + dy * dy)
-                val f = (d - 0.28f) * 0.05f
-                a.x += dx / (d + 1e-3f) * f
-                a.y += dy / (d + 1e-3f) * f
-                b.x -= dx / (d + 1e-3f) * f
-                b.y -= dy / (d + 1e-3f) * f
-            }
-            // gravity to centre + clamp
-            for (n in nodes) {
-                n.x += (0.5f - n.x) * 0.01f
-                n.y += (0.5f - n.y) * 0.01f
-                n.x = n.x.coerceIn(0.08f, 0.92f)
-                n.y = n.y.coerceIn(0.1f, 0.9f)
+        val pos =
+            app.mnemo.domain.graph.GraphFocus.forceLayout(
+                nodes.associate { it.concept.id to (it.x to it.y) },
+                edges.map { it.fromId to it.toId },
+            )
+        nodes.forEach { n ->
+            pos[n.concept.id]?.let { (x, y) ->
+                n.x = x
+                n.y = y
             }
         }
     }
@@ -256,6 +230,7 @@ class GraphViewModel(
 
     fun delete(id: Long) {
         viewModelScope.launch {
+            graph.concepts.byId(id)?.let { DeckGraph.rememberDeleted(it) }
             graph.concepts.delete(id)
             _state.update { it.copy(selectedId = null, selectedCards = emptyList()) }
             reload()

@@ -51,6 +51,13 @@ class ConceptRepository(
         conceptId: Long,
     ) = withContext(Dispatchers.IO) { q.link(cardId, conceptId) }
 
+    /** Links many (card id, concept id) pairs in one transaction; existing links are kept. */
+    suspend fun linkMany(pairs: Collection<Pair<Long, Long>>) =
+        withContext(Dispatchers.IO) {
+            if (pairs.isEmpty()) return@withContext
+            db.transaction { pairs.forEach { (card, concept) -> q.link(card, concept) } }
+        }
+
     suspend fun unlink(
         cardId: Long,
         conceptId: Long,

@@ -21,6 +21,7 @@ import androidx.navigation.toRoute
 import app.mnemo.data.io.AutoBackup
 import app.mnemo.data.seed.EnglishDeck
 import app.mnemo.di.AppGraph
+import app.mnemo.domain.graph.DeckGraph
 import app.mnemo.platform.Prefs
 import app.mnemo.ui.browse.BrowseScreen
 import app.mnemo.ui.decks.DeckListScreen
@@ -64,7 +65,12 @@ fun App(
             }
             // Everyone gets the built-in English deck once, in the background.
             LaunchedEffect(onboarded) {
-                if (onboarded) runCatching { EnglishDeck.installOnce(graph) }
+                if (onboarded) {
+                    runCatching { EnglishDeck.installOnce(graph) }
+                    // Every deck on the knowledge graph, plus the English grammar topics.
+                    runCatching { DeckGraph.sync(graph) }
+                    runCatching { EnglishDeck.syncGraph(graph) }
+                }
             }
             if (!checked) return@MnemoTheme
             if (!onboarded) {

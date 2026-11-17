@@ -114,21 +114,57 @@ class NoteRepository(
         tags: List<String>,
     ) = withContext(Dispatchers.IO) {
         val now = clock.now()
-        db.transaction {
-            val row = notes.selectById(noteId).executeAsOne()
-            val type = types.selectById(row.note_type_id).executeAsOne().toDomain()
-            notes.update(deckId, encodeFields(fields), encodeTags(tags), now, noteId)
-            val existing =
-                cards
-                    .selectByNote(noteId)
-                    .executeAsList()
-                    .map { it.template_index.toInt() }
-                    .toSet()
-            CardGenerator.templateIndices(type, fields).filter { it !in existing }.forEach { idx ->
-                cards.insert(noteId, idx.toLong(), now)
-            }
+        db.transaction { updateBlocking(noteId, deckId, fields, tags, now) }
+    }
+
+    /** A change for [updateMany]. */
+    data class NoteUpdate(
+        val noteId: Long,
+        val deckId: Long,
+        val fields: Map<String, String>,
+        val tags: List<String>,
+    )
+
+    /** [update] for many notes in one transaction (scheduling is kept). */
+    suspend fun updateMany(updates: List<NoteUpdate>): Int =
+        withContext(Dispatchers.IO) {
+            if (updates.isEmpty()) return@withContext 0
+            val now = clock.now()
+            db.transaction { updates.forEach { updateBlocking(it.noteId, it.deckId, it.fields, it.tags, now) } }
+            updates.size
+        }
+
+    private fun updateBlocking(
+        noteId: Long,
+        deckId: Long,
+        fields: Map<String, String>,
+        tags: List<String>,
+        now: Long,
+    ) {
+        val row = notes.selectById(noteId).executeAsOne()
+        val type = types.selectById(row.note_type_id).executeAsOne().toDomain()
+        notes.update(deckId, encodeFields(fields), encodeTags(tags), now, noteId)
+        val existing =
+            cards
+                .selectByNote(noteId)
+                .executeAsList()
+                .map { it.template_index.toInt() }
+                .toSet()
+        CardGenerator.templateIndices(type, fields).filter { it !in existing }.forEach { idx ->
+            cards.insert(noteId, idx.toLong(), now)
         }
     }
+
+    /** Sets updated time back to creation time (built-in content updates, not user edits). */
+    suspend fun markUnedited(ids: List<Long>) =
+        withContext(Dispatchers.IO) {
+            if (ids.isEmpty()) return@withContext
+            db.transaction { ids.chunked(500).forEach { notes.markUnedited(it) } }
+        }
+
+    /** Notes whose deck is exactly [deckId] (not its sub-decks). */
+    suspend fun byDeck(deckId: Long): List<Note> =
+        withContext(Dispatchers.IO) { notes.selectByDeck(deckId).executeAsList().map { it.toDomain() } }
 
     suspend fun setTags(
         noteId: Long,

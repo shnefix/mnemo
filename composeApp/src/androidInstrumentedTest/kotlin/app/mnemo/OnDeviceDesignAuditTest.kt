@@ -240,7 +240,12 @@ class OnDeviceDesignAuditTest {
                     }
                 }.isSuccess
             if (!found) break
-            val row = rule.onAllNodes(hasText(name)).onFirst().fetchSemanticsNode().boundsInRoot
+            val row =
+                rule
+                    .onAllNodes(hasText(name))
+                    .onFirst()
+                    .fetchSemanticsNode()
+                    .boundsInRoot
             val menus = rule.onAllNodes(hasContentDescription("Deck menu"))
             val onRow = menus.fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.top <= row.bottom && it.boundsInRoot.bottom >= row.top }
             check(onRow >= 0) { "No menu button on the row of $name" }

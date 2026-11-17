@@ -57,7 +57,12 @@ object CardGenerator {
                     buildString {
                         if (plural.isNotEmpty()) append("Plural: *$plural*  \n")
                         if (ipa.isNotEmpty()) append("$ipa  \n")
-                        if (example.isNotEmpty()) append("\n> $example")
+                        // Several examples, one per line, each shown as its own quote.
+                        if (example.isNotEmpty()) {
+                            append(
+                                "\n" + example.lines().filter { it.isNotBlank() }.joinToString("\n\n") { "> ${it.trim()}" },
+                            )
+                        }
                         if (exampleT.isNotEmpty()) append("  \n> *$exampleT*")
                     }.trim()
                 if (templateIndex == 0) {

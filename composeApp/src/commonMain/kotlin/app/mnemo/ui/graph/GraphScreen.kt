@@ -117,9 +117,10 @@ fun GraphScreen(
         }
         Spacer(Modifier.height(16.dp))
         if (compact) {
-            GraphCanvas(state, Modifier.fillMaxWidth().height(380.dp), onSelect = vm::select, onFocus = vm::setFocus)
+            GraphCanvas(state, Modifier.fillMaxWidth().height(460.dp), onSelect = vm::select, onFocus = vm::setFocus)
             Spacer(Modifier.height(16.dp))
-            SidePanel(state, vm, onEditCard, onRename = { renaming = true })
+            // The page itself scrolls on phones, so the panel must not scroll on its own.
+            SidePanel(state, vm, onEditCard, onRename = { renaming = true }, scrollable = false)
         } else {
             Row(Modifier.fillMaxWidth().height(620.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 GraphCanvas(state, Modifier.weight(1f).fillMaxSize(), onSelect = vm::select, onFocus = vm::setFocus)
@@ -191,8 +192,22 @@ private fun GraphCanvas(
                 )
             }
         }
+        // Size by cards relative to the biggest concept; smaller circles when the graph is crowded.
+        val maxCards = (shown.maxOfOrNull { it.cardCount } ?: 1).coerceAtLeast(1)
+        val crowded = shown.size > 12
+        val maxD = if (crowded) 56f else 84f
+        // A crowded graph labels only its biggest concepts, plus the selection and its neighbours;
+        // tap a node (or use Neighbours) to read the rest.
+        val labelled =
+            if (!crowded) {
+                shown.map { it.concept.id }.toSet()
+            } else {
+                val sel = state.selectedId
+                val near = state.edges.filter { it.fromId == sel || it.toId == sel }.flatMap { listOf(it.fromId, it.toId) }
+                (shown.sortedByDescending { it.cardCount }.take(6).map { it.concept.id } + near + listOfNotNull(sel)).toSet()
+            }
         shown.forEach { n ->
-            val d = (36 + 6 * sqrt(n.cardCount.toFloat())).coerceAtMost(84f).dp
+            val d = (28f + (maxD - 28f) * sqrt(n.cardCount.toFloat() / maxCards)).dp
             val selected = n.concept.id == state.selectedId
             val color = masteryColor(n.mastery)
             Column(
@@ -223,19 +238,21 @@ private fun GraphCanvas(
                         color = if (n.mastery < 0.55) MnemoColors.text else MnemoColors.background,
                     )
                 }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    n.concept.name,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (selected) MnemoColors.coral else MnemoColors.text,
-                    maxLines = 2,
-                    modifier =
-                        Modifier
-                            .clip(
-                                RoundedCornerShape(4.dp),
-                            ).background(MnemoColors.background.copy(alpha = 0.7f))
-                            .padding(horizontal = 4.dp),
-                )
+                if (n.concept.id in labelled) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        n.concept.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (selected) MnemoColors.coral else MnemoColors.text,
+                        maxLines = 2,
+                        modifier =
+                            Modifier
+                                .clip(
+                                    RoundedCornerShape(4.dp),
+                                ).background(MnemoColors.background.copy(alpha = 0.7f))
+                                .padding(horizontal = 4.dp),
+                    )
+                }
             }
         }
         if (state.nodes.isEmpty() && !state.loading) {
@@ -301,6 +318,7 @@ private fun SidePanel(
     vm: GraphViewModel,
     onEditCard: (Long) -> Unit,
     onRename: () -> Unit,
+    scrollable: Boolean = true,
 ) {
     val node = state.selected
     Panel(Modifier.fillMaxSize(), padding = PaddingValues(20.dp)) {
@@ -315,7 +333,7 @@ private fun SidePanel(
         var edgeTarget by remember { mutableStateOf<GraphNode?>(null) }
         var edgeRelation by remember { mutableStateOf(Relation.RelatedTo) }
 
-        Column(Modifier.verticalScroll(rememberScrollState())) {
+        Column(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
                     Eyebrow("Concept")
@@ -416,7 +434,10 @@ private fun SidePanel(
 
             Eyebrow("Cards · weakest first")
             Spacer(Modifier.height(6.dp))
-            state.selectedCards.forEach { c ->
+            // A deck concept can hold hundreds of cards: show the weakest ones, not all of them.
+            var showAll by remember(node.concept.id) { mutableStateOf(false) }
+            val shownCards = if (showAll) state.selectedCards else state.selectedCards.take(CARD_LIMIT)
+            shownCards.forEach { c ->
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -453,6 +474,10 @@ private fun SidePanel(
                     )
                 }
             }
+            if (!showAll && state.selectedCards.size > CARD_LIMIT) {
+                Spacer(Modifier.height(4.dp))
+                MnemoButton("Show all ${state.selectedCards.size} cards", onClick = { showAll = true })
+            }
             Spacer(Modifier.height(8.dp))
             Box {
                 MnemoButton("Link a card", onClick = { linkPick = true }, icon = MnemoIcons.Plus)
@@ -469,3 +494,6 @@ private fun SidePanel(
         }
     }
 }
+
+/** Linked cards listed before "Show all". */
+private const val CARD_LIMIT = 30

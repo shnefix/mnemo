@@ -154,6 +154,11 @@ class OnDeviceDataTest {
             // A review session opens on the root deck with its daily mix of new cards.
             val root = decks.first { it.name == EnglishDeck.ROOT }
             assertTrue(ReviewSession(g, root.id).load() > 0)
+            // Every deck and grammar topic lands on the knowledge graph.
+            app.mnemo.domain.graph.DeckGraph
+                .sync(g)
+            EnglishDeck.syncGraph(g)
+            assertTrue(g.concepts.all().size >= 6 + EnglishDeck.topics.size, "concepts: ${g.concepts.all().map { it.name }}")
         }
 
     @Test

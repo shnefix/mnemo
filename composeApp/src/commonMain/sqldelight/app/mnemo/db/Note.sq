@@ -85,5 +85,9 @@ INSERT OR REPLACE INTO deleted_note(uid, deleted_at) VALUES (?, ?);
 deleteByUid:
 DELETE FROM note WHERE uid = ?;
 
+-- Seed updates: keep a note looking unedited so a later content version can update it again.
+markUnedited:
+UPDATE note SET updated_at = created_at WHERE id IN ?;
+
 pruneTombstones:
 DELETE FROM deleted_note WHERE deleted_at < ?;

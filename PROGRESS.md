@@ -4,6 +4,15 @@
 
 - **Built-in English (B1–B2) deck** (`data/seed/`): installed once per install (flag
   `seed.english`), ~500 notes in one transaction, split into packs of 10 under five sections.
+- **Three examples per card** (`data/seed/EnglishDeckExtras.kt`): every English card shows three
+  examples (situations: three other ways to say it). The seed is versioned (`EnglishDeck.VERSION`,
+  pref `seed.english`); a newer version updates installed cards in place, keeping their reviews,
+  unless the user edited them.
+- **Graph for all decks** (`domain/graph/DeckGraph.kt`): each top-level deck and sub-deck is a
+  concept (packs roll up), every card is linked to its decks' concepts, and the English grammar
+  cards are grouped into 17 topics with "learn first" links. Synced at launch and on opening the
+  Graph; deleted deck concepts stay deleted (`graph.hidden`). Stable force layout; crowded graphs
+  label only the biggest concepts and the selection's neighbours.
 - **Daily limits** (`domain/review/DailyQueue.kt`): a deck's new-cards-per-day caps its subtree
   and each sub-deck caps its share, Anki-style, so a parent deck gives a mix; "All decks" adds the
   default limit on top. Today, Decks and Review share it, so their counts agree.
