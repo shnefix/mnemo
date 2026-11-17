@@ -145,6 +145,8 @@ class NoteRepository(
 
     suspend fun countAll(): Long = withContext(Dispatchers.IO) { notes.countAll().executeAsOne() }
 
+    suspend fun countByDeck(deckId: Long): Long = withContext(Dispatchers.IO) { notes.countByDeck(deckId).executeAsOne() }
+
     /** Every `source_id` in use (importers set one to recognise notes they created). */
     suspend fun existingSourceIds(): List<Long> = withContext(Dispatchers.IO) { notes.sourceIds().executeAsList().filterNotNull() }
 }

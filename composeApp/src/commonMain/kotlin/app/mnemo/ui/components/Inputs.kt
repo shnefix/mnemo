@@ -131,7 +131,7 @@ fun <T> MnemoSelect(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(44.dp)
+                    .heightIn(min = 44.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(MnemoColors.surface2)
                     .border(1.dp, MnemoColors.outline, RoundedCornerShape(12.dp))
@@ -234,7 +234,7 @@ private fun FlowTags(
                 row.forEach { tag ->
                     Row(
                         Modifier
-                            .height(28.dp)
+                            .heightIn(min = 32.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(MnemoColors.surface3)
                             .padding(start = 10.dp, end = 4.dp),
@@ -243,7 +243,7 @@ private fun FlowTags(
                         Text(tag, style = MaterialTheme.typography.labelMedium, color = MnemoColors.text)
                         Spacer(Modifier.width(4.dp))
                         Box(
-                            Modifier.size(22.dp).clip(RoundedCornerShape(6.dp)).clickable(role = Role.Button) { onRemove(tag) },
+                            Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)).clickable(role = Role.Button) { onRemove(tag) },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(

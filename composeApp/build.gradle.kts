@@ -1,5 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -83,6 +84,7 @@ kotlin {
             implementation(libs.sqldelight.coroutines)
 
             implementation(libs.markdown.renderer)
+            implementation(libs.markdown.renderer.code)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -133,14 +135,29 @@ if (androidSdkPresent) {
         packaging {
             resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
         }
+        // Release key: `keystore.properties` at the repo root (gitignored) points at the
+        // keystore. Without it (CI, fresh clone) release falls back to the debug key.
+        val keystoreProps =
+            rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
+                Properties().also { p -> f.inputStream().use { p.load(it) } }
+            }
+        signingConfigs {
+            if (keystoreProps != null) {
+                create("release") {
+                    storeFile = file(keystoreProps.getProperty("storeFile"))
+                    storePassword = keystoreProps.getProperty("storePassword")
+                    keyAlias = keystoreProps.getProperty("keyAlias")
+                    keyPassword = keystoreProps.getProperty("keyPassword")
+                }
+            }
+        }
         buildTypes {
             getByName("release") {
                 // R8 + resource shrinking: a debug build of Compose runs several times slower.
                 isMinifyEnabled = true
                 isShrinkResources = true
                 proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-                // Signed with the debug key so it installs over the existing app and keeps its data.
-                signingConfig = signingConfigs.getByName("debug")
+                signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             }
         }
         compileOptions {

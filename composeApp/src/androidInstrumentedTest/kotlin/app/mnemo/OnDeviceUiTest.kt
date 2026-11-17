@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.mnemo.data.seed.EnglishDeck
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -129,5 +130,23 @@ class OnDeviceUiTest {
             rule.waitUntil(15_000) { !exists(isDialog()) }
         }
         rule.waitUntil(15_000) { !exists(hasText(deckName)) }
+    }
+
+    /** The built-in English deck is added on launch and shows in the deck list (unless the user deleted it). */
+    @Test
+    fun builtInEnglishDeckAppearsInDeckList() {
+        rule.waitUntil(20_000) {
+            exists(hasText("What are you learning?")) || exists(hasContentDescription("Create cards"))
+        }
+        if (exists(hasText("What are you learning?"))) {
+            rule.onNodeWithText("Skip").performClick()
+        }
+        waitFor(hasContentDescription("Create cards"))
+        rule.onNode(hasText("Decks") and hasRole(Role.Tab)).performClick()
+        // Installing ~500 notes takes a moment on a cold first launch.
+        rule.waitUntil(60_000) {
+            runCatching { rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(EnglishDeck.ROOT)) }.isSuccess
+        }
+        waitFor(hasText(EnglishDeck.ROOT))
     }
 }

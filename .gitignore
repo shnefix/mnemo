@@ -16,3 +16,7 @@ local.properties
 
 # Secrets
 .env
+
+# Release signing (keystore lives in ~/.config/mnemo; back it up)
+keystore.properties
+*.jks

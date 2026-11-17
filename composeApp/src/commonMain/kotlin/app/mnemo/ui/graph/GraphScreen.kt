@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -115,12 +117,12 @@ fun GraphScreen(
         }
         Spacer(Modifier.height(16.dp))
         if (compact) {
-            GraphCanvas(state, Modifier.fillMaxWidth().height(380.dp), onSelect = vm::select)
+            GraphCanvas(state, Modifier.fillMaxWidth().height(380.dp), onSelect = vm::select, onFocus = vm::setFocus)
             Spacer(Modifier.height(16.dp))
             SidePanel(state, vm, onEditCard, onRename = { renaming = true })
         } else {
             Row(Modifier.fillMaxWidth().height(620.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                GraphCanvas(state, Modifier.weight(1f).fillMaxSize(), onSelect = vm::select)
+                GraphCanvas(state, Modifier.weight(1f).fillMaxSize(), onSelect = vm::select, onFocus = vm::setFocus)
                 Box(Modifier.width(360.dp).fillMaxSize()) { SidePanel(state, vm, onEditCard, onRename = { renaming = true }) }
             }
         }
@@ -149,13 +151,15 @@ private fun GraphCanvas(
     state: GraphUiState,
     modifier: Modifier,
     onSelect: (Long?) -> Unit,
+    onFocus: (Int) -> Unit,
 ) {
     BoxWithConstraints(
         modifier.clip(RoundedCornerShape(20.dp)).background(MnemoColors.surface).clickable(role = Role.Button) { onSelect(null) },
     ) {
         val w = maxWidth
         val h = maxHeight
-        val byId = state.nodes.associateBy { it.concept.id }
+        val shown = state.visibleNodes
+        val byId = shown.associateBy { it.concept.id }
         Canvas(Modifier.fillMaxSize()) {
             // dot grid
             val step = 24.dp.toPx()
@@ -187,7 +191,7 @@ private fun GraphCanvas(
                 )
             }
         }
-        state.nodes.forEach { n ->
+        shown.forEach { n ->
             val d = (36 + 6 * sqrt(n.cardCount.toFloat())).coerceAtMost(84f).dp
             val selected = n.concept.id == state.selectedId
             val color = masteryColor(n.mastery)
@@ -238,7 +242,7 @@ private fun GraphCanvas(
             Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("No concepts yet", style = MaterialTheme.typography.headlineSmall, color = MnemoColors.text)
                 Text(
-                    "Create a concept, then link cards to it. AI suggestions come in Phase 5.",
+                    "Create a concept and link cards to it, or try Suggest concepts.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MnemoColors.text2,
                 )
@@ -250,6 +254,23 @@ private fun GraphCanvas(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
+            if (state.selectedId != null) {
+                listOf(0 to "All", 1 to "Neighbours", 2 to "2 steps").forEach { (hops, label) ->
+                    val on = state.focusHops == hops
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (on) MnemoColors.background else MnemoColors.text,
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (on) MnemoColors.coral else MnemoColors.surface2)
+                                .clickable(role = Role.Tab) { onFocus(hops) }
+                                .semantics { contentDescription = "Show $label" + if (on) ", selected" else "" }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
+            }
             Legend("related", null)
             Legend("prerequisite", "- -")
             Legend("part of", "···")
@@ -362,7 +383,13 @@ private fun SidePanel(
                         "×",
                         style = MaterialTheme.typography.labelLarge,
                         color = MnemoColors.text3,
-                        modifier = Modifier.clickable { vm.removeEdge(e) },
+                        modifier =
+                            Modifier
+                                .sizeIn(minWidth = 40.dp, minHeight = 40.dp)
+                                .clip(CircleShape)
+                                .clickable(role = Role.Button) { vm.removeEdge(e) }
+                                .semantics { contentDescription = "Remove link to ${other.concept.name}" }
+                                .wrapContentSize(),
                     )
                 }
             }
@@ -417,9 +444,12 @@ private fun SidePanel(
                         style = MaterialTheme.typography.labelLarge,
                         color = MnemoColors.text3,
                         modifier =
-                            Modifier.clickable {
-                                vm.unlink(c.view.card.id, node.concept.id)
-                            },
+                            Modifier
+                                .sizeIn(minWidth = 40.dp, minHeight = 40.dp)
+                                .clip(CircleShape)
+                                .clickable(role = Role.Button) { vm.unlink(c.view.card.id, node.concept.id) }
+                                .semantics { contentDescription = "Unlink card ${c.question}" }
+                                .wrapContentSize(),
                     )
                 }
             }

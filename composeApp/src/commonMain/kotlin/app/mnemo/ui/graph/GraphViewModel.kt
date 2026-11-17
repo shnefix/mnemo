@@ -43,8 +43,27 @@ data class GraphUiState(
     val allCards: List<Pair<CardView, String>> = emptyList(),
     val suggestions: List<ConceptSuggester.Suggestion> = emptyList(),
     val suggested: Boolean = false,
+    /** Hops shown around the selected concept; 0 shows the whole graph. */
+    val focusHops: Int = 0,
 ) {
     val selected: GraphNode? get() = nodes.firstOrNull { it.concept.id == selectedId }
+
+    /** Nodes to draw: everything, or the selected concept's neighbourhood laid out in rings. */
+    val visibleNodes: List<GraphNode>
+        get() {
+            val center = selectedId
+            if (focusHops == 0 || center == null) return nodes
+            val dist =
+                app.mnemo.domain.graph.GraphFocus
+                    .neighborhood(edges, center, focusHops)
+            val pos =
+                app.mnemo.domain.graph.GraphFocus
+                    .radialLayout(dist)
+            return nodes.filter { it.concept.id in dist }.map { n ->
+                val (x, y) = pos.getValue(n.concept.id)
+                n.copy(x = x, y = y)
+            }
+        }
 }
 
 class GraphViewModel(
@@ -113,6 +132,8 @@ class GraphViewModel(
     ) {
         if (nodes.size < 2) return
         val byId = nodes.associateBy { it.concept.id }
+        // Weaker push per pair as the graph grows, so big graphs spread instead of piling on the walls.
+        val repulsion = 0.0025f * (12f / nodes.size.coerceAtLeast(12))
         repeat(120) {
             // repulsion
             for (a in nodes) {
@@ -126,7 +147,7 @@ class GraphViewModel(
                         dy = 0.01f
                         d2 = 2e-4f
                     }
-                    val f = 0.0025f / d2
+                    val f = repulsion / d2
                     val d = sqrt(d2)
                     a.x += dx / d * f
                     a.y += dy / d * f
@@ -155,8 +176,10 @@ class GraphViewModel(
         }
     }
 
+    fun setFocus(hops: Int) = _state.update { it.copy(focusHops = hops) }
+
     fun select(id: Long?) {
-        _state.update { it.copy(selectedId = id) }
+        _state.update { it.copy(selectedId = id, focusHops = if (id == null) 0 else it.focusHops) }
         if (id == null) return
         viewModelScope.launch {
             val now = graph.clock.now()

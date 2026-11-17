@@ -81,7 +81,9 @@ class TodayViewModel(
             val today = localDate(now)
             val decks = graph.decks.all()
             val allIds = decks.map { it.id }
-            val due = graph.cards.dueCounts(allIds, now, Int.MAX_VALUE, Int.MAX_VALUE)
+            // Same limits "Start review" uses for all decks, so the headline matches the session.
+            val defaults = DeckSettings()
+            val due = graph.cards.dueCounts(allIds, now, defaults.newPerDay, defaults.reviewsPerDay)
             val rows =
                 decks.map { d ->
                     val ids = graph.decks.subtreeIds(d.id)

@@ -6,10 +6,28 @@ CREATE TABLE note (
     tags TEXT NOT NULL DEFAULT '', -- space separated, each tag wrapped: " a b "
     source_id INTEGER,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    uid TEXT -- stable identity across devices (sync); filled by note_uid on insert
 );
 
 CREATE INDEX note_deck ON note(deck_id);
+CREATE INDEX note_uid_idx ON note(uid);
+
+CREATE TRIGGER note_uid AFTER INSERT ON note WHEN new.uid IS NULL
+BEGIN
+    UPDATE note SET uid = lower(hex(randomblob(16))) WHERE id = new.id;
+END;
+
+-- Tombstones so a sync does not bring deleted notes back.
+CREATE TABLE deleted_note (
+    uid TEXT NOT NULL PRIMARY KEY,
+    deleted_at INTEGER NOT NULL
+);
+
+CREATE TRIGGER note_tombstone AFTER DELETE ON note WHEN old.uid IS NOT NULL
+BEGIN
+    INSERT OR REPLACE INTO deleted_note(uid, deleted_at) VALUES (old.uid, CAST(strftime('%s', 'now') AS INTEGER) * 1000);
+END;
 
 selectById:
 SELECT * FROM note WHERE id = ?;
@@ -51,3 +69,18 @@ SELECT DISTINCT tags FROM note WHERE tags != '';
 -- Importer keys (Markdown vault cards), for skipping what was imported before.
 sourceIds:
 SELECT source_id FROM note WHERE source_id IS NOT NULL;
+
+setUid:
+UPDATE note SET uid = ? WHERE id = ?;
+
+selectByUid:
+SELECT * FROM note WHERE uid = ?;
+
+allTombstones:
+SELECT * FROM deleted_note;
+
+addTombstone:
+INSERT OR REPLACE INTO deleted_note(uid, deleted_at) VALUES (?, ?);
+
+deleteByUid:
+DELETE FROM note WHERE uid = ?;

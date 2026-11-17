@@ -28,6 +28,12 @@ object JsonBackup {
         val concepts: List<BConcept>,
         val cardConcepts: List<BCardConcept>,
         val conceptEdges: List<BEdge>,
+        val deletedNotes: List<BTombstone> = emptyList(),
+    )
+
+    @Serializable data class BTombstone(
+        val uid: String,
+        val deletedAt: Long,
     )
 
     @Serializable data class BDeck(
@@ -54,6 +60,7 @@ object JsonBackup {
         val tags: List<String>,
         val createdAt: Long,
         val updatedAt: Long,
+        val uid: String? = null,
     )
 
     @Serializable data class BCard(
@@ -148,6 +155,7 @@ object JsonBackup {
                                 decodeTags(it.tags),
                                 it.created_at,
                                 it.updated_at,
+                                it.uid,
                             )
                         },
                     cards =
@@ -206,6 +214,11 @@ object JsonBackup {
                             .allEdges()
                             .executeAsList()
                             .map { BEdge(it.from_id, it.to_id, it.relation) },
+                    deletedNotes =
+                        db.noteQueries
+                            .allTombstones()
+                            .executeAsList()
+                            .map { BTombstone(it.uid, it.deleted_at) },
                 )
             json.encodeToString(backup)
         }
@@ -270,35 +283,77 @@ object JsonBackup {
                     pending = next
                 }
                 val noteMap = HashMap<Long, Long>()
-                val existingNotes =
-                    if (merge) {
-                        db.noteQueries
-                            .selectAll()
-                            .executeAsList()
-                            .associateBy { it.deck_id to it.created_at }
-                    } else {
-                        emptyMap()
-                    }
                 val mergedNotes = HashSet<Long>()
+                val localNotes = if (merge) db.noteQueries.selectAll().executeAsList() else emptyList()
+                val byUid = localNotes.filter { it.uid != null }.associateBy { it.uid!! }.toMutableMap()
+                // Backups from before note uids existed: match on deck + creation time, and on the
+                // fields too when several notes share that time (an .apkg import stamps one time).
+                val byLegacy = localNotes.groupBy { it.deck_id to it.created_at }
+                val tombstones = HashMap<String, Long>()
+                db.noteQueries
+                    .allTombstones()
+                    .executeAsList()
+                    .forEach { tombstones[it.uid] = it.deleted_at }
+                if (merge) {
+                    // The other device deleted these: drop them here unless edited here since.
+                    backup.deletedNotes.forEach { t ->
+                        val local = byUid[t.uid]
+                        if (local != null && local.updated_at <= t.deletedAt) {
+                            db.noteQueries.delete(local.id)
+                            byUid.remove(t.uid)
+                            imported += 1
+                        } else if (local == null) {
+                            db.noteQueries.addTombstone(t.uid, maxOf(t.deletedAt, tombstones[t.uid] ?: 0))
+                        }
+                        tombstones[t.uid] = maxOf(t.deletedAt, tombstones[t.uid] ?: 0)
+                    }
+                }
+                val claimed = HashSet<Long>()
                 backup.notes.forEach { n ->
                     val deck = deckMap[n.deckId] ?: return@forEach
                     val type = typeMap[n.noteTypeId] ?: return@forEach
-                    val same = existingNotes[deck to n.createdAt]?.takeIf { it.note_type_id == type }
-                    if (same != null) {
-                        noteMap[n.id] = same.id
-                        mergedNotes += same.id
-                        if (n.updatedAt > same.updated_at) {
-                            db.noteQueries.update(deck, encodeFields(n.fields), encodeTags(n.tags), n.updatedAt, same.id)
-                            imported += 1
+                    val fieldsJson = encodeFields(n.fields)
+                    if (merge) {
+                        // Deleted here after its last edit there: keep it deleted.
+                        val gone = n.uid?.let { tombstones[it] }
+                        if (gone != null && gone >= n.updatedAt) return@forEach
+                        val same =
+                            n.uid?.let { byUid[it] }?.takeIf { it.id !in claimed }
+                                ?: byLegacy[deck to n.createdAt]
+                                    ?.filter { it.note_type_id == type && it.id !in claimed }
+                                    ?.let { c -> c.firstOrNull { it.fields_json == fieldsJson } ?: c.singleOrNull() }
+                        if (same != null) {
+                            claimed += same.id
+                            noteMap[n.id] = same.id
+                            mergedNotes += same.id
+                            if (n.uid != null && same.uid != n.uid) {
+                                // Adopt one uid on both sides; the lower one wins so devices converge.
+                                val keep = listOfNotNull(same.uid, n.uid).min()
+                                if (keep != same.uid) db.noteQueries.setUid(keep, same.id)
+                            }
+                            if (n.updatedAt > same.updated_at) {
+                                db.noteQueries.update(deck, fieldsJson, encodeTags(n.tags), n.updatedAt, same.id)
+                                imported += 1
+                            }
+                            return@forEach
                         }
-                        return@forEach
                     }
-                    db.noteQueries.insert(deck, type, encodeFields(n.fields), encodeTags(n.tags), null, n.createdAt, n.updatedAt)
-                    noteMap[n.id] = db.noteQueries.lastInsertId().executeAsOne()
+                    db.noteQueries.insert(deck, type, fieldsJson, encodeTags(n.tags), null, n.createdAt, n.updatedAt)
+                    val id = db.noteQueries.lastInsertId().executeAsOne()
+                    if (n.uid != null &&
+                        db.noteQueries
+                            .selectByUid(n.uid)
+                            .executeAsList()
+                            .isEmpty()
+                    ) {
+                        db.noteQueries.setUid(n.uid, id)
+                    }
+                    noteMap[n.id] = id
+                    claimed += id
                     imported += 1
                 }
                 val cardMap = HashMap<Long, Long>()
-                val knownLogs = HashSet<Long>()
+                val knownLogs = HashSet<Pair<Long, Long>>()
                 backup.cards.forEach { c ->
                     val note = noteMap[c.noteId] ?: return@forEach
                     if (note in mergedNotes) {
@@ -312,7 +367,7 @@ object JsonBackup {
                             db.reviewLogQueries
                                 .byCard(local.id)
                                 .executeAsList()
-                                .forEach { knownLogs += it.reviewed_at * 31 + local.id }
+                                .forEach { knownLogs += local.id to it.reviewed_at }
                             if ((c.lastReview ?: 0) > (local.last_review ?: 0)) {
                                 db.cardQueries.updateScheduling(
                                     c.state,
@@ -354,7 +409,7 @@ object JsonBackup {
                 }
                 backup.reviewLogs.forEach { l ->
                     val card = cardMap[l.cardId] ?: return@forEach
-                    if (!knownLogs.add(l.reviewedAt * 31 + card)) return@forEach
+                    if (!knownLogs.add(card to l.reviewedAt)) return@forEach
                     db.reviewLogQueries.insert(
                         card,
                         l.rating,

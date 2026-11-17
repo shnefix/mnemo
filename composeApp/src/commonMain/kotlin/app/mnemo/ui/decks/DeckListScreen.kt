@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,6 +68,16 @@ fun DeckListScreen(
     var renaming by remember { mutableStateOf<DeckRow?>(null) }
     var deleting by remember { mutableStateOf<DeckRow?>(null) }
     val compact = LocalWindowSize.current == WindowSize.Compact
+    var collapsed by remember { mutableStateOf(setOf<Long>()) }
+    val collapsedPaths = state.rows.filter { it.deck.id in collapsed }.map { it.deck.path + "::" }
+    val visibleRows = state.rows.filter { r -> collapsedPaths.none { r.deck.path.startsWith(it) } }
+    val parentPaths =
+        state.rows
+            .mapNotNull { r ->
+                r.deck.path
+                    .substringBeforeLast("::", "")
+                    .ifEmpty { null }
+            }.toSet()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -76,6 +87,23 @@ fun DeckListScreen(
         item {
             ScreenHeader(title = "Decks", subtitle = "${state.rows.size} decks") {
                 MnemoButton("New deck", onClick = { showCreate = true }, icon = MnemoIcons.Plus, primary = true)
+                if (parentPaths.isNotEmpty()) {
+                    val allCollapsed = state.rows.filter { it.deck.path in parentPaths }.all { it.deck.id in collapsed }
+                    MnemoButton(
+                        if (allCollapsed) "Show subdecks" else "Hide subdecks",
+                        onClick = {
+                            collapsed =
+                                if (allCollapsed) {
+                                    emptySet()
+                                } else {
+                                    state.rows
+                                        .filter { it.deck.path in parentPaths }
+                                        .map { it.deck.id }
+                                        .toSet()
+                                }
+                        },
+                    )
+                }
                 // Phones have no sidebar, so Browse and Settings are reached from here.
                 if (compact) {
                     MnemoButton("Browse", onClick = onBrowse, icon = MnemoIcons.Search)
@@ -93,9 +121,12 @@ fun DeckListScreen(
                 )
             }
         }
-        items(state.rows, key = { it.deck.id }) { row ->
+        items(visibleRows, key = { it.deck.id }) { row ->
             DeckRowItem(
                 row = row,
+                hasChildren = row.deck.path in parentPaths,
+                collapsed = row.deck.id in collapsed,
+                onToggle = { collapsed = if (row.deck.id in collapsed) collapsed - row.deck.id else collapsed + row.deck.id },
                 onReview = { onReview(row.deck.id) },
                 onAddCards = { onAddCards(row.deck.id) },
                 onSettings = { onSettings(row.deck.id) },
@@ -156,6 +187,9 @@ fun DeckListScreen(
 @Composable
 private fun DeckRowItem(
     row: DeckRow,
+    hasChildren: Boolean,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
     onReview: () -> Unit,
     onAddCards: () -> Unit,
     onSettings: () -> Unit,
@@ -171,6 +205,16 @@ private fun DeckRowItem(
         onClick = onReview,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (hasChildren) {
+                IconActionButton(
+                    MnemoIcons.Chevron,
+                    if (collapsed) "Show subdecks" else "Hide subdecks",
+                    onClick = onToggle,
+                    modifier = Modifier.rotate(if (collapsed) 0f else 90f),
+                    size = 40.dp,
+                )
+                Spacer(Modifier.width(8.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     row.deck.name,

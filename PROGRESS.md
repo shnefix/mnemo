@@ -1,5 +1,20 @@
 # Progress
 
+## Done — Hardening (Nov 2026)
+
+- **Release signing**: `keystore.properties` (gitignored) points at a dedicated release key in
+  `~/.config/mnemo/release.jks`; without it release falls back to the debug key. Back the key up.
+- **Sync**: notes carry a stable `uid` (schema v2, `1.sqm`), and deletions leave tombstones
+  (`deleted_note`) that travel in backups, so deleted notes stay deleted and notes stamped with
+  the same time (an `.apkg` import) no longer fold together. Old backups still match by deck +
+  creation time + fields. Review logs from both devices are unioned.
+- **Cards**: LaTeX (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`, `[$]…[/$]`) as Unicode math; fenced code is
+  syntax-highlighted.
+- **Graph**: Neighbours / 2-steps focus around the selected concept; layout spreads large graphs.
+- **Accessibility**: labelled 40dp remove buttons in the graph, larger tag remove target, buttons
+  and selects grow with the text size instead of clipping.
+- **CI**: builds the R8 release APK and uploads it.
+
 ## Done — Phase 2 (Anki import + polish)
 
 - **`.apkg` import** (`data/io/ApkgImporter.kt`): legacy `collection.anki2`/`anki21` (JSON note
@@ -25,18 +40,12 @@
 - Review with undo/shortcuts/swipe/Type mode; Today, Decks, Deck settings, Editor, Browse,
   Stats, Graph (manual concepts), Settings with CSV import and JSON backup.
 
-## Next — Phase 3 (AI generation)
-
-- `llm/` provider layer (Anthropic, OpenAI, Ollama) configured from `.env`, prompts as files.
-- Generate-from-source: text, PDF (text extraction), URL; accept/edit screen; dedup via embeddings.
-
 ## Known issues / gaps
 
-- Android build untested here (no SDK on this machine).
 - `.apkg` import maps note types by shape: Basic-like types with more than two fields fold the
   extra fields into Back with their names; custom templates (CSS, conditional sections) are
   not reproduced. Scheduler values for learning cards are approximate.
-- LaTeX and syntax-highlighted code in fields are still plain text (markdown code blocks only).
+- LaTeX is shown as Unicode math (Greek, operators, sub/superscripts, fractions, roots), not typeset;
+  big matrices and aligned environments come out as flat text.
 - Desktop audio opens the system player rather than playing inline.
-- Graph layout is a simple spring layout; large graphs get crowded.
-- Speak mode disabled (Phase 4); FSRS optimizer disabled (Phase 5).
+- Graph layout is a spring layout; on large graphs use the Neighbours / 2 steps focus.

@@ -3,6 +3,7 @@ package app.mnemo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.mnemo.data.db.DriverFactory
+import app.mnemo.data.seed.EnglishDeck
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.cards.CardGenerator
 import app.mnemo.domain.model.CardState
@@ -131,6 +132,28 @@ class OnDeviceDataTest {
             assertTrue(views.any { it.noteKind == NoteKind.Vocab })
             // deckName is the deck's own name, not its full path.
             assertEquals("Smoke", views.first().deckName)
+        }
+
+    /** The built-in English deck installs through the Android driver, and a rerun adds nothing. */
+    @Test
+    fun englishDeckInstallsOnDevice() =
+        runBlocking {
+            val g = graph()
+            val added = EnglishDeck.install(g)
+            assertTrue(added > 450, "only $added notes")
+            assertEquals(added.toLong(), g.notes.countAll())
+            val decks = g.decks.all()
+            assertTrue(decks.any { it.name == EnglishDeck.ROOT && it.parentId == null })
+            assertTrue(decks.any { it.name == "Vocabulary 01" })
+            assertTrue(decks.any { it.name == "Grammar 01" })
+            assertTrue(g.cards.countAll() > added, "vocabulary should make two cards per note")
+            // Every card renders a non-empty front.
+            g.cards.allViews().forEach { v -> assertTrue(v.fields.values.any { it.isNotBlank() }, "empty card ${v.card.id}") }
+            assertEquals(0, EnglishDeck.install(g))
+            assertEquals(added.toLong(), g.notes.countAll())
+            // A review session opens on the root deck with its daily mix of new cards.
+            val root = decks.first { it.name == EnglishDeck.ROOT }
+            assertTrue(ReviewSession(g, root.id).load() > 0)
         }
 
     @Test

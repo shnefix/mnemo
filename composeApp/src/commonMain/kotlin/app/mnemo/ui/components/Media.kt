@@ -25,10 +25,14 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import app.mnemo.domain.text.LatexText
 import app.mnemo.platform.MediaFiles
 import app.mnemo.platform.decodeImage
 import app.mnemo.platform.playAudio
 import app.mnemo.ui.theme.MnemoColors
+import com.mikepenz.markdown.compose.components.markdownComponents
+import com.mikepenz.markdown.compose.elements.highlightedCodeBlock
+import com.mikepenz.markdown.compose.elements.highlightedCodeFence
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
@@ -38,7 +42,8 @@ private val soundRef = Regex("""\[sound:([^\]]+)\]""")
 
 /**
  * Renders a field: Markdown text, with `![](file)` images and `[sound:file]`
- * clips (from the media folder) shown inline, as Anki cards expect.
+ * clips (from the media folder) shown inline, as Anki cards expect. LaTeX is shown
+ * as Unicode math and fenced code is syntax-highlighted.
  */
 @Composable
 fun MarkdownText(
@@ -47,7 +52,7 @@ fun MarkdownText(
 ) {
     val sounds = remember(text) { soundRef.findAll(text).map { it.groupValues[1] }.toList() }
     val images = remember(text) { imageRef.findAll(text).map { it.groupValues[1] }.toList() }
-    val plain = remember(text) { text.replace(soundRef, "").replace(imageRef, "").trim() }
+    val plain = remember(text) { LatexText.render(text.replace(soundRef, "").replace(imageRef, "").trim()) }
 
     Column(modifier) {
         if (plain.isNotEmpty()) {
@@ -55,6 +60,7 @@ fun MarkdownText(
                 content = plain,
                 colors = markdownColor(text = MnemoColors.text),
                 typography = markdownTypography(),
+                components = markdownComponents(codeBlock = highlightedCodeBlock, codeFence = highlightedCodeFence),
             )
         }
         images.forEach { name ->
