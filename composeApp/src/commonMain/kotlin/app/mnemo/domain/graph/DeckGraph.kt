@@ -91,8 +91,8 @@ object DeckGraph {
                 .toHashSet()
         val links =
             graph.cards
-                .allViews()
-                .flatMap { v -> conceptsAbove(v.deckId).map { v.card.id to it } }
+                .decksAndTags()
+                .flatMap { p -> conceptsAbove(p.deckId).map { p.cardId to it } }
                 .filter { it !in known }
         graph.concepts.linkMany(links)
     }

@@ -1,9 +1,14 @@
 package app.mnemo.platform
 
+import android.content.ContentUris
+import android.content.ContentValues
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -113,10 +118,71 @@ actual suspend fun saveTextFile(
     content: String,
 ): String? =
     withContext(Dispatchers.IO) {
-        val file = File(appDataDir(), suggestedName)
-        file.writeText(content)
-        file.absolutePath
+        // Download/Mnemo outlives the app (a copy in the app's own folder goes with it).
+        runCatching { writeToDownloads(suggestedName, content, replace = true) }.getOrNull()
+            ?: File(appDataDir(), suggestedName).also { it.writeText(content) }.absolutePath
     }
+
+actual suspend fun saveSharedBackup(
+    name: String,
+    content: String,
+    prefix: String,
+    keep: Int,
+): String? =
+    withContext(Dispatchers.IO) {
+        runCatching {
+            val where = writeToDownloads(name, content, replace = true) ?: return@runCatching null
+            // Only this app's own files are visible here, so older copies of other apps stay put.
+            ownDownloads()
+                .filter { it.second.startsWith(prefix) }
+                .sortedByDescending { it.second }
+                .drop(keep)
+                .forEach { appContext.contentResolver.delete(it.first, null, null) }
+            where
+        }.getOrNull()
+    }
+
+private const val DOWNLOAD_DIR = "Mnemo"
+
+/** This app's files in Download/Mnemo, as (uri, display name). Android 10+ only. */
+private fun ownDownloads(): List<Pair<Uri, String>> {
+    if (Build.VERSION.SDK_INT < 29) return emptyList()
+    val out = mutableListOf<Pair<Uri, String>>()
+    appContext.contentResolver
+        .query(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME),
+            "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
+            arrayOf("${Environment.DIRECTORY_DOWNLOADS}/$DOWNLOAD_DIR%"),
+            null,
+        )?.use { c ->
+            while (c.moveToNext()) {
+                out += ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, c.getLong(0)) to c.getString(1)
+            }
+        }
+    return out
+}
+
+/** Writes [content] to Download/Mnemo/[name]; null on Android 9 and older (that needs a storage permission). */
+private fun writeToDownloads(
+    name: String,
+    content: String,
+    replace: Boolean,
+): String? {
+    if (Build.VERSION.SDK_INT < 29) return null
+    val resolver = appContext.contentResolver
+    // Same name again (the sync file): replace it instead of piling up "name (1)" copies.
+    if (replace) ownDownloads().filter { it.second == name }.forEach { resolver.delete(it.first, null, null) }
+    val values =
+        ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$DOWNLOAD_DIR")
+        }
+    val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+    resolver.openOutputStream(uri)?.use { it.write(content.encodeToByteArray()) } ?: return null
+    return "Download/$DOWNLOAD_DIR/$name"
+}
 
 actual fun decodeImage(bytes: ByteArray): ImageBitmap? = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
 

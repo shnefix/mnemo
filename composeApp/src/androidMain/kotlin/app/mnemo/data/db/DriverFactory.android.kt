@@ -15,6 +15,13 @@ actual class DriverFactory(
             name = path?.substringAfterLast('/') ?: "mnemo-memory.db",
             callback =
                 object : AndroidSqliteDriver.Callback(MnemoDatabase.Schema) {
+                    // Write-ahead logging lets the screens read while a background sync or seed
+                    // writes; with the default journal every read waited for the writer.
+                    override fun onConfigure(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                        super.onConfigure(db)
+                        if (path != null) db.enableWriteAheadLogging()
+                    }
+
                     override fun onOpen(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                         db.setForeignKeyConstraintsEnabled(true)
                     }

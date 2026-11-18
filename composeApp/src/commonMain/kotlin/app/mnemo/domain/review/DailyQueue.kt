@@ -5,6 +5,7 @@ import app.mnemo.di.AppGraph
 import app.mnemo.domain.model.Card
 import app.mnemo.domain.model.Deck
 import app.mnemo.domain.model.DeckSettings
+import app.mnemo.domain.stats.startOfLocalDay
 
 /**
  * Today's cards for one deck or for all decks (`deckId == null`), with daily limits applied
@@ -38,16 +39,74 @@ object DailyQueue {
         deckId: Long?,
         now: Long,
         decks: List<Deck>? = null,
-    ): DueCounts {
+    ): DueCounts = snapshot(graph, now, decks).counts(deckId)
+
+    /**
+     * Everything [counts] needs for every deck, in four grouped queries. Today and the deck list
+     * ask for many decks at once; querying each subtree separately cost hundreds of round trips.
+     */
+    suspend fun snapshot(
+        graph: AppGraph,
+        now: Long,
+        decks: List<Deck>? = null,
+    ): Snapshot {
         val all = decks ?: graph.decks.all()
-        val tree = Tree(all)
-        if (deckId != null && tree.byId[deckId] == null) return DueCounts(0, 0, 0)
-        val reviewLimit = (deckId?.let { tree.byId[it]?.settings } ?: DeckSettings()).reviewsPerDay
-        val base = graph.cards.dueCounts(tree.subtree(deckId), now, newLimit = 0, reviewLimit = reviewLimit)
-        return base.copy(new = newCards(graph, tree, deckId, now).size)
+        val dayStart = startOfLocalDay(now)
+        return Snapshot(
+            tree = Tree(all),
+            newByDeck = graph.cards.newCountByDeck(now),
+            dueByDeck = graph.cards.dueCountByDeck(now),
+            introducedByDeck = graph.cards.newIntroducedByDeck(dayStart),
+            reviewsDoneByDeck = graph.cards.reviewsDoneByDeck(dayStart),
+        )
     }
 
-    private class Tree(
+    /** Per-deck numbers from [snapshot]; [counts] gives the same result as [DailyQueue.counts]. */
+    class Snapshot internal constructor(
+        private val tree: Tree,
+        private val newByDeck: Map<Long, Int>,
+        private val dueByDeck: Map<Long, Pair<Int, Int>>,
+        private val introducedByDeck: Map<Long, Int>,
+        private val reviewsDoneByDeck: Map<Long, Int>,
+    ) {
+        private fun sum(
+            deckId: Long?,
+            f: (Long) -> Int,
+        ): Int = tree.subtree(deckId).sumOf(f)
+
+        fun counts(deckId: Long?): DueCounts {
+            if (deckId != null && tree.byId[deckId] == null) return DueCounts(0, 0, 0)
+            val reviewLimit = (deckId?.let { tree.byId[it]?.settings } ?: DeckSettings()).reviewsPerDay
+            val ids = tree.subtree(deckId)
+            val learning = ids.sumOf { dueByDeck[it]?.first ?: 0 }
+            val review = ids.sumOf { dueByDeck[it]?.second ?: 0 }
+            val reviewLeft = (reviewLimit - ids.sumOf { reviewsDoneByDeck[it] ?: 0 }).coerceAtLeast(0)
+            return DueCounts(
+                new = newCount(deckId?.let { tree.byId[it] }, Int.MAX_VALUE),
+                learning = learning,
+                review = minOf(review, reviewLeft),
+            )
+        }
+
+        /** The size of what [newCards] would hand out (same limits, same order of filling). */
+        private fun newCount(
+            deck: Deck?,
+            cap: Int,
+        ): Int {
+            val limit = (deck?.settings ?: DeckSettings()).newPerDay
+            val introduced = sum(deck?.id) { introducedByDeck[it] ?: 0 }
+            val left = minOf(cap, limit - introduced).coerceAtLeast(0)
+            if (left == 0) return 0
+            var taken = if (deck != null) minOf(newByDeck[deck.id] ?: 0, left) else 0
+            for (child in tree.children[deck?.id].orEmpty()) {
+                if (taken >= left) break
+                taken += newCount(child, left - taken)
+            }
+            return taken
+        }
+    }
+
+    internal class Tree(
         all: List<Deck>,
     ) {
         val byId = all.associateBy { it.id }

@@ -85,33 +85,83 @@ actual object Cloud {
 
     actual suspend fun remoteHash(): String? = meta().get(Source.SERVER).await().getString("hash")
 
+    /** Gzipped, base64 and cut into pieces that fit a Firestore document. */
+    private fun pack(json: String): List<String> {
+        val gz = ByteArrayOutputStream().also { out -> GZIPOutputStream(out).use { it.write(json.encodeToByteArray()) } }.toByteArray()
+        return Base64.encodeToString(gz, Base64.NO_WRAP).chunked(CHUNK)
+    }
+
+    private fun unpack(parts: List<String>): String {
+        val bytes = Base64.decode(parts.joinToString(""), Base64.NO_WRAP)
+        return GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes().decodeToString() }
+    }
+
+    private suspend fun readParts(
+        collection: com.google.firebase.firestore.CollectionReference,
+        chunks: Int,
+    ): List<String>? =
+        (0 until chunks).map { i ->
+            collection
+                .document("chunk_$i")
+                .get(Source.SERVER)
+                .await()
+                .getString("data") ?: return null
+        }
+
     actual suspend fun downloadSnapshot(): Pair<String, String>? {
         val m = meta().get(Source.SERVER).await()
         val hash = m.getString("hash") ?: return null
         val chunks = (m.getLong("chunks") ?: return null).toInt()
-        val sb = StringBuilder()
-        for (i in 0 until chunks) {
-            sb.append(
-                userRef()
-                    .collection("sync")
-                    .document("chunk_$i")
-                    .get(Source.SERVER)
-                    .await()
-                    .getString("data") ?: return null,
-            )
-        }
-        val bytes = Base64.decode(sb.toString(), Base64.NO_WRAP)
-        val json = GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes().decodeToString() }
-        return json to hash
+        val parts = readParts(userRef().collection("sync"), chunks) ?: return null
+        return unpack(parts) to hash
+    }
+
+    private fun history() = userRef().collection("history")
+
+    actual suspend fun listHistory(): List<String> =
+        history()
+            .get(Source.SERVER)
+            .await()
+            .documents
+            .map { it.id }
+            .sortedDescending()
+
+    actual suspend fun saveHistory(
+        day: String,
+        json: String,
+    ) {
+        val parts = pack(json)
+        val doc = history().document(day)
+        val batch = db().batch()
+        parts.forEachIndexed { i, p -> batch.set(doc.collection("parts").document("chunk_$i"), mapOf("data" to p)) }
+        batch.set(doc, mapOf("chunks" to parts.size, "updatedAt" to System.currentTimeMillis()))
+        batch.commit().await()
+    }
+
+    actual suspend fun loadHistory(day: String): String? {
+        val doc = history().document(day)
+        val chunks = (doc.get(Source.SERVER).await().getLong("chunks") ?: return null).toInt()
+        return readParts(doc.collection("parts"), chunks)?.let(::unpack)
+    }
+
+    actual suspend fun deleteHistory(day: String) {
+        val doc = history().document(day)
+        val batch = db().batch()
+        doc
+            .collection("parts")
+            .get(Source.SERVER)
+            .await()
+            .documents
+            .forEach { batch.delete(it.reference) }
+        batch.delete(doc)
+        batch.commit().await()
     }
 
     actual suspend fun uploadSnapshot(
         json: String,
         hash: String,
     ) {
-        val gz = ByteArrayOutputStream().also { out -> GZIPOutputStream(out).use { it.write(json.encodeToByteArray()) } }.toByteArray()
-        val encoded = Base64.encodeToString(gz, Base64.NO_WRAP)
-        val parts = encoded.chunked(CHUNK)
+        val parts = pack(json)
         val batch = db().batch()
         parts.forEachIndexed { i, p -> batch.set(userRef().collection("sync").document("chunk_$i"), mapOf("data" to p)) }
         batch.set(meta(), mapOf("hash" to hash, "chunks" to parts.size, "updatedAt" to System.currentTimeMillis()))

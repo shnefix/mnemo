@@ -25,6 +25,21 @@ expect object Cloud {
         hash: String,
     )
 
+    /**
+     * Daily copies of the snapshot at `users/{uid}/history/{day}` (day = "yyyymmdd"), so a
+     * deletion that synced to every phone can still be undone. Newest first.
+     */
+    suspend fun listHistory(): List<String>
+
+    suspend fun saveHistory(
+        day: String,
+        json: String,
+    )
+
+    suspend fun loadHistory(day: String): String?
+
+    suspend fun deleteHistory(day: String)
+
     /** Small JSON documents (daily quiz, answers) at `users/{uid}/{collection}/{id}`. */
     suspend fun readDoc(
         collection: String,

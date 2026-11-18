@@ -33,6 +33,7 @@ import app.mnemo.LocalAppGraph
 import app.mnemo.data.io.ApkgImporter
 import app.mnemo.data.io.AutoBackup
 import app.mnemo.data.io.CsvImporter
+import app.mnemo.data.io.DeckTrash
 import app.mnemo.data.io.JsonBackup
 import app.mnemo.data.io.MarkdownImporter
 import app.mnemo.domain.model.Deck
@@ -75,6 +76,7 @@ fun SettingsScreen() {
     var busy by remember { mutableStateOf(false) }
     var counts by remember { mutableStateOf("") }
     var backups by remember { mutableStateOf(AutoBackup.list()) }
+    var trash by remember { mutableStateOf<List<DeckTrash.Entry>>(emptyList()) }
     var dayStart by remember { mutableStateOf(DayStart.hour) }
     var reminderHour by remember { mutableStateOf(Reminder.hour) }
     var titleFallback by remember { mutableStateOf(false) }
@@ -94,7 +96,10 @@ fun SettingsScreen() {
         counts =
             "${graph.decks.count()} decks · ${graph.notes.countAll()} notes · ${graph.cards.countAll()} cards · ${graph.reviewLogs.countAll()} reviews"
     }
-    LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(Unit) {
+        refresh()
+        trash = runCatching { DeckTrash.list(graph.clock.now()) }.getOrDefault(emptyList())
+    }
 
     fun runCsv(text: String) {
         val deck =
@@ -185,7 +190,7 @@ fun SettingsScreen() {
                 return@rememberFilePicker
             }
             scope.launch {
-                val n = runCatching { JsonBackup.restore(graph, file.text) }
+                val n = runCatching { JsonBackup.restoreDeleted(graph, file.text) }
                 message = n.fold({ "Restored $it notes" }, { "Restore failed: ${it.message}" })
                 refresh()
             }
@@ -426,7 +431,8 @@ fun SettingsScreen() {
                 Eyebrow("Automatic backups")
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Written once a day when the app opens; the newest ${AutoBackup.KEEP} are kept in ${appDataDir()}/${AutoBackup.DIR}.",
+                    "Written once a day when the app opens; the newest ${AutoBackup.KEEP} are kept in ${appDataDir()}/${AutoBackup.DIR}" +
+                        (if (app.mnemo.platform.Cloud.supported) ", with a copy in Download/Mnemo that outlives the app." else "."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MnemoColors.text2,
                 )
@@ -465,6 +471,45 @@ fun SettingsScreen() {
                         message = if (name != null) "Backup written: $name" else "Nothing to back up yet"
                     }
                 })
+            }
+            Panel {
+                Eyebrow("Recently deleted")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Deleted decks are kept for ${DeckTrash.KEEP_DAYS} days with their cards and review history.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MnemoColors.text2,
+                )
+                Spacer(Modifier.height(8.dp))
+                if (trash.isEmpty()) {
+                    Text("Nothing deleted recently.", style = MaterialTheme.typography.bodySmall, color = MnemoColors.text3)
+                }
+                trash.forEach { t ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(t.deckPath, style = MaterialTheme.typography.bodyMedium, color = MnemoColors.text)
+                            Text(
+                                "${t.cards} cards · deleted ${AutoBackup.label(t.deletedAt)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MnemoColors.text2,
+                            )
+                        }
+                        MnemoButton("Restore", height = 36.dp, enabled = !busy, onClick = {
+                            busy = true
+                            scope.launch {
+                                val n = runCatching { DeckTrash.restore(graph, t) }
+                                message = n.fold({ "Restored “${t.deckPath}” ($it notes)" }, { "Restore failed: ${it.message}" })
+                                trash = runCatching { DeckTrash.list(graph.clock.now()) }.getOrDefault(emptyList())
+                                busy = false
+                                refresh()
+                            }
+                        })
+                    }
+                }
             }
             Panel {
                 Eyebrow("AI")
@@ -566,6 +611,68 @@ private fun AccountSection(graph: app.mnemo.di.AppGraph) {
                 }
             })
         }
+    }
+    if (email != null) CloudHistory(graph)
+}
+
+/** The daily cloud copies: a way back when a deletion has already synced to every phone. */
+@Composable
+private fun CloudHistory(graph: app.mnemo.di.AppGraph) {
+    val scope = rememberCoroutineScope()
+    var days by remember { mutableStateOf<List<String>?>(null) }
+    var note by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        days =
+            runCatching {
+                app.mnemo.domain.sync.CloudSync
+                    .history()
+            }.getOrDefault(emptyList())
+    }
+    Spacer(Modifier.height(16.dp))
+    Eyebrow("Cloud copies")
+    Spacer(Modifier.height(6.dp))
+    Text(
+        "One copy a day, the last ${app.mnemo.domain.sync.CloudSync.HISTORY_KEEP} kept. Restoring brings back what that day had " +
+            "and this phone has lost; nothing here is duplicated or undone." + (note?.let { " $it" } ?: ""),
+        style = MaterialTheme.typography.bodySmall,
+        color = MnemoColors.text2,
+    )
+    Spacer(Modifier.height(8.dp))
+    when (val d = days) {
+        null -> Text("Loading…", style = MaterialTheme.typography.bodySmall, color = MnemoColors.text3)
+        emptyList<String>() ->
+            Text(
+                "No cloud copy yet; the first is made at the next sync.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MnemoColors.text3,
+            )
+        else ->
+            d.forEach { day ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        "${day.substring(6, 8)}.${day.substring(4, 6)}.${day.substring(0, 4)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MnemoColors.text,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MnemoButton("Restore", height = 36.dp, enabled = !busy, onClick = {
+                        busy = true
+                        scope.launch {
+                            note =
+                                runCatching {
+                                    app.mnemo.domain.sync.CloudSync
+                                        .restoreFromHistory(graph, day)
+                                }.fold({ "Restored $it notes." }, { "Restore failed: ${it.message}" })
+                            busy = false
+                        }
+                    })
+                }
+            }
     }
 }
 

@@ -169,10 +169,10 @@ fun TodayScreen(
             }
             Spacer(Modifier.height(12.dp))
             if (compact) {
-                state.decks.chunked(2).forEach { pair ->
+                state.decks.chunked(2).forEachIndexed { row, pair ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         pair.forEachIndexed { i, d ->
-                            val tile = listOf(MnemoColors.sky, MnemoColors.lime, MnemoColors.lavender)[(state.decks.indexOf(d)) % 3]
+                            val tile = listOf(MnemoColors.sky, MnemoColors.lime, MnemoColors.lavender)[(row * 2 + i) % 3]
                             Panel(
                                 modifier =
                                     Modifier

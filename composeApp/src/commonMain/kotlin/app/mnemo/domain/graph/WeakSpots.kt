@@ -59,10 +59,12 @@ object WeakSpots {
         if (concepts.isEmpty()) return emptyList()
         val links = graph.concepts.allLinks()
         val scheduler = graph.scheduler(DeckSettings())
+        // One query for every card; looking each linked card up on its own took thousands of queries.
+        val cardById = graph.cards.all().associateBy { it.id }
         return concepts.mapNotNull { c ->
             val ids = links[c.id].orEmpty()
             if (ids.isEmpty()) return@mapNotNull null
-            val cards = ids.mapNotNull { graph.cards.byId(it) }.filter { !it.suspended }
+            val cards = ids.mapNotNull { cardById[it] }.filter { !it.suspended }
             if (cards.isEmpty()) return@mapNotNull null
             val m = mastery(cards, scheduler, now)
             ConceptScore(c.id, c.name, m.value, cards.map { it.id }, m.studied)
@@ -84,8 +86,9 @@ object WeakSpots {
         val scheduler = graph.scheduler(DeckSettings())
         val seen = LinkedHashSet<Long>()
         weakest.flatMap { it.cardIds }.forEach { seen += it }
+        val cardById = graph.cards.all().associateBy { it.id }
         return seen
-            .mapNotNull { id -> graph.cards.byId(id) }
+            .mapNotNull { id -> cardById[id] }
             .filter { it.stability != null && it.lastReview != null }
             .sortedBy { scheduler.retrievability(it, now) }
             .take(maxCards)

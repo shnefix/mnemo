@@ -91,6 +91,41 @@ class DailyQueueTest {
         }
 
     @Test
+    fun batchedCountsMatchTheQueueForEveryDeck() =
+        runBlocking {
+            val clock = TestClock(1_750_000_000_000L)
+            val g = graph(clock)
+            EnglishDeck.install(g)
+            val root = g.decks.all().first { it.name == EnglishDeck.ROOT }
+            // A deck with a tiny review limit, so the limit and reviews done today matter.
+            val small = g.decks.createByPath("Small", DeckSettings(newPerDay = 4, reviewsPerDay = 2))
+            val basic = g.notes.noteTypeOf(NoteKind.Basic)
+            repeat(8) { i -> g.notes.create(small, basic, mapOf("Front" to "s$i", "Back" to "x"), emptyList()) }
+            // Learn some cards (Again keeps them in learning, Easy makes them review cards).
+            listOf(root.id, small).forEach { deckId ->
+                val session = ReviewSession(g, deckId)
+                session.load()
+                repeat(4) { i ->
+                    session.current() ?: return@repeat
+                    session.answer(if (i % 2 == 0) Rating.Again else Rating.Easy, responseMs = 1000)
+                }
+            }
+            // Ten days on: the Easy cards are due as reviews, the Again ones as learning.
+            clock.time += 10 * 86_400_000L
+            val now = clock.now()
+            val decks = g.decks.all()
+            val snapshot = DailyQueue.snapshot(g, now, decks)
+            (decks.map { it.id } + listOf<Long?>(null)).forEach { id ->
+                val queue = DailyQueue.cards(g, id, now, decks)
+                val counts = snapshot.counts(id)
+                assertEquals(queue.size, counts.total, "deck $id: $counts vs ${queue.size} cards")
+                assertEquals(queue.count { it.state == app.mnemo.domain.model.CardState.New }, counts.new, "new in deck $id")
+            }
+            assertTrue(snapshot.counts(small).review <= 2, "the review limit caps the count")
+            assertTrue(snapshot.counts(null).learning + snapshot.counts(null).review > 0, "some cards are due")
+        }
+
+    @Test
     fun interleaveAlternatesParts() {
         assertEquals(listOf(1, 10, 100, 2, 20, 3), DailyQueue.interleave(listOf(listOf(1, 2, 3), listOf(10, 20), listOf(100))))
         assertEquals(emptyList(), DailyQueue.interleave(emptyList<List<Int>>()))

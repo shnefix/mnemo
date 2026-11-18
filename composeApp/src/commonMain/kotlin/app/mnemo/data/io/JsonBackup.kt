@@ -7,6 +7,7 @@ import app.mnemo.data.db.encodeTags
 import app.mnemo.data.db.json
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.model.DeckSettings
+import app.mnemo.platform.SystemClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -117,111 +118,170 @@ object JsonBackup {
         val relation: String,
     )
 
-    suspend fun export(graph: AppGraph): String =
+    suspend fun export(graph: AppGraph): String = withContext(Dispatchers.IO) { json.encodeToString(snapshot(graph)) }
+
+    /**
+     * The decks [deckIds] with their notes, cards and review history, in the backup format
+     * (what the trash keeps of a deleted deck).
+     */
+    suspend fun exportDecks(
+        graph: AppGraph,
+        deckIds: Set<Long>,
+    ): String =
         withContext(Dispatchers.IO) {
-            val db = graph.db
-            val backup =
-                Backup(
-                    exportedAt = graph.clock.now(),
-                    decks =
-                        db.deckQueries.selectAll().executeAsList().map {
-                            BDeck(
-                                it.id,
-                                it.parent_id,
-                                it.name,
-                                runCatching {
-                                    json.decodeFromString<DeckSettings>(it.settings_json)
-                                }.getOrDefault(DeckSettings()),
-                                it.created_at,
-                            )
-                        },
-                    noteTypes =
-                        db.noteTypeQueries.selectAll().executeAsList().map {
-                            BNoteType(
-                                it.id,
-                                it.name,
-                                it.kind,
-                                it.fields_json,
-                                it.templates_json,
-                            )
-                        },
-                    notes =
-                        db.noteQueries.selectAll().executeAsList().map {
-                            BNote(
-                                it.id,
-                                it.deck_id,
-                                it.note_type_id,
-                                decodeFields(it.fields_json),
-                                decodeTags(it.tags),
-                                it.created_at,
-                                it.updated_at,
-                                it.uid,
-                            )
-                        },
-                    cards =
-                        db.cardQueries.allCardViews().executeAsList().map {
-                            BCard(
-                                it.id,
-                                it.note_id,
-                                it.template_index,
-                                it.state,
-                                it.due,
-                                it.stability,
-                                it.difficulty,
-                                it.elapsed_days,
-                                it.scheduled_days,
-                                it.reps,
-                                it.lapses,
-                                it.last_review,
-                                it.suspended,
-                                it.buried_until,
-                                it.learning_step,
-                            )
-                        },
-                    reviewLogs =
-                        db.reviewLogQueries.since(0).executeAsList().map {
-                            BLog(
-                                it.card_id,
-                                it.rating,
-                                it.state_before,
-                                it.due_before,
-                                it.stability_before,
-                                it.difficulty_before,
-                                it.elapsed_days_before,
-                                it.scheduled_days_before,
-                                it.reps_before,
-                                it.lapses_before,
-                                it.last_review_before,
-                                it.learning_step_before,
-                                it.response_ms,
-                                it.mode,
-                                it.user_overrode,
-                                it.reviewed_at,
-                            )
-                        },
-                    concepts =
-                        db.conceptQueries
-                            .selectAll()
-                            .executeAsList()
-                            .map { BConcept(it.id, it.name, it.description) },
-                    cardConcepts =
-                        db.conceptQueries
-                            .allLinks()
-                            .executeAsList()
-                            .map { BCardConcept(it.card_id, it.concept_id) },
-                    conceptEdges =
-                        db.conceptQueries
-                            .allEdges()
-                            .executeAsList()
-                            .map { BEdge(it.from_id, it.to_id, it.relation) },
-                    deletedNotes =
-                        db.noteQueries
-                            .allTombstones()
-                            .executeAsList()
-                            .map { BTombstone(it.uid, it.deleted_at) },
-                )
-            json.encodeToString(backup)
+            val all = snapshot(graph)
+            val notes = all.notes.filter { it.deckId in deckIds }
+            val noteIds = notes.mapTo(HashSet()) { it.id }
+            val cards = all.cards.filter { it.noteId in noteIds }
+            val cardIds = cards.mapTo(HashSet()) { it.id }
+            // The parents of the top deck come along (without their cards), so a restore can put
+            // a sub-deck back where it was; existing decks are matched by name, not duplicated.
+            val byId = all.decks.associateBy { it.id }
+            val keep = HashSet(deckIds)
+            deckIds.forEach { id ->
+                var parent = byId[id]?.parentId
+                while (parent != null && keep.add(parent)) parent = byId[parent]?.parentId
+            }
+            json.encodeToString(
+                all.copy(
+                    decks = all.decks.filter { it.id in keep },
+                    notes = notes,
+                    cards = cards,
+                    reviewLogs = all.reviewLogs.filter { it.cardId in cardIds },
+                    concepts = emptyList(),
+                    cardConcepts = emptyList(),
+                    conceptEdges = emptyList(),
+                    deletedNotes = emptyList(),
+                ),
+            )
         }
+
+    /**
+     * Restores a backup without duplicating or reverting what is here: notes that are missing
+     * (deleted since) come back, counting as edited now so the record of their deletion, here
+     * and on phones synced with this one, does not keep them deleted; notes still here keep
+     * their current text and the newer scheduling wins, as in [merge].
+     */
+    suspend fun restoreDeleted(
+        graph: AppGraph,
+        text: String,
+    ): Int {
+        val backup = json.decodeFromString<Backup>(text)
+        val here =
+            withContext(Dispatchers.IO) {
+                graph.db.noteQueries
+                    .selectAll()
+                    .executeAsList()
+                    .mapNotNullTo(HashSet()) { it.uid }
+            }
+        // Deletion records use the wall clock; stay after them even if the app clock lags.
+        val now = maxOf(graph.clock.now(), SystemClock.now()) + 1
+        val notes = backup.notes.map { if (it.uid != null && it.uid in here) it else it.copy(updatedAt = now) }
+        return merge(graph, json.encodeToString(backup.copy(notes = notes)))
+    }
+
+    private fun snapshot(graph: AppGraph): Backup {
+        val db = graph.db
+        return Backup(
+            exportedAt = graph.clock.now(),
+            decks =
+                db.deckQueries.selectAll().executeAsList().map {
+                    BDeck(
+                        it.id,
+                        it.parent_id,
+                        it.name,
+                        runCatching {
+                            json.decodeFromString<DeckSettings>(it.settings_json)
+                        }.getOrDefault(DeckSettings()),
+                        it.created_at,
+                    )
+                },
+            noteTypes =
+                db.noteTypeQueries.selectAll().executeAsList().map {
+                    BNoteType(
+                        it.id,
+                        it.name,
+                        it.kind,
+                        it.fields_json,
+                        it.templates_json,
+                    )
+                },
+            notes =
+                db.noteQueries.selectAll().executeAsList().map {
+                    BNote(
+                        it.id,
+                        it.deck_id,
+                        it.note_type_id,
+                        decodeFields(it.fields_json),
+                        decodeTags(it.tags),
+                        it.created_at,
+                        it.updated_at,
+                        it.uid,
+                    )
+                },
+            cards =
+                db.cardQueries.selectAll().executeAsList().map {
+                    BCard(
+                        it.id,
+                        it.note_id,
+                        it.template_index,
+                        it.state,
+                        it.due,
+                        it.stability,
+                        it.difficulty,
+                        it.elapsed_days,
+                        it.scheduled_days,
+                        it.reps,
+                        it.lapses,
+                        it.last_review,
+                        it.suspended,
+                        it.buried_until,
+                        it.learning_step,
+                    )
+                },
+            reviewLogs =
+                db.reviewLogQueries.since(0).executeAsList().map {
+                    BLog(
+                        it.card_id,
+                        it.rating,
+                        it.state_before,
+                        it.due_before,
+                        it.stability_before,
+                        it.difficulty_before,
+                        it.elapsed_days_before,
+                        it.scheduled_days_before,
+                        it.reps_before,
+                        it.lapses_before,
+                        it.last_review_before,
+                        it.learning_step_before,
+                        it.response_ms,
+                        it.mode,
+                        it.user_overrode,
+                        it.reviewed_at,
+                    )
+                },
+            concepts =
+                db.conceptQueries
+                    .selectAll()
+                    .executeAsList()
+                    .map { BConcept(it.id, it.name, it.description) },
+            cardConcepts =
+                db.conceptQueries
+                    .allLinks()
+                    .executeAsList()
+                    .map { BCardConcept(it.card_id, it.concept_id) },
+            conceptEdges =
+                db.conceptQueries
+                    .allEdges()
+                    .executeAsList()
+                    .map { BEdge(it.from_id, it.to_id, it.relation) },
+            deletedNotes =
+                db.noteQueries
+                    .allTombstones()
+                    .executeAsList()
+                    .map { BTombstone(it.uid, it.deleted_at) },
+        )
+    }
 
     /** Restores into the database, remapping ids. Existing data is kept; decks with the same path are merged. */
     suspend fun restore(

@@ -21,8 +21,5 @@ expect fun appDataDir(): String
 /** True on a touch-first platform (used to decide between swipe and keyboard hints). */
 expect val isMobilePlatform: Boolean
 
-/** Opens the system share sheet with [text] (Android); copies nothing and returns false elsewhere. */
-expect fun shareText(text: String): Boolean
-
 /** Tells home-screen widgets the due count may have changed (no-op off Android). */
 expect fun refreshWidgets()

@@ -36,8 +36,11 @@ object Prefs {
             map
         }
 
+    // Read on the main thread and written by background work (seeding, sync): keep it consistent.
+    @kotlin.jvm.Synchronized
     fun get(key: String): String? = load()[key]
 
+    @kotlin.jvm.Synchronized
     fun set(
         key: String,
         value: String,

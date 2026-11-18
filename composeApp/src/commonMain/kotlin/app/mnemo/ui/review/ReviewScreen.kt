@@ -67,8 +67,9 @@ import app.mnemo.domain.model.Rating
 import app.mnemo.domain.model.ReviewMode
 import app.mnemo.domain.review.AnswerMatcher
 import app.mnemo.platform.Speech
+import app.mnemo.platform.SpeechInput
 import app.mnemo.platform.isMobilePlatform
-import app.mnemo.platform.shareText
+import app.mnemo.platform.rememberSpeechInput
 import app.mnemo.ui.components.IconActionButton
 import app.mnemo.ui.components.Kbd
 import app.mnemo.ui.components.MarkdownText
@@ -108,6 +109,10 @@ fun ReviewScreen(
         if (!state.typing) focus.requestFocus()
         // Dictation cards read their sentence aloud as soon as they appear.
         state.rendered?.listen?.let { if (Speech.available) Speech.speak(it, state.language) }
+        // Speak mode is a mock interview: the question is asked out loud.
+        if (state.mode == ReviewMode.Speak && state.rendered?.listen == null && Speech.available) {
+            state.rendered?.question?.let { Speech.speak(plainCardText(it), state.language) }
+        }
     }
     LaunchedEffect(state.toast) {
         if (state.toast != null) {
@@ -197,6 +202,8 @@ fun ReviewScreen(
                                     onReveal = vm::reveal,
                                     onSwipe = vm::grade,
                                     onTyped = vm::setTyped,
+                                    onSpoken = vm::setSpoken,
+                                    onSpokenMore = vm::addSpoken,
                                 )
                                 Spacer(Modifier.height(16.dp))
                                 if (!state.revealed) {
@@ -276,7 +283,6 @@ private fun ModeSwitch(
         options = listOf("Classic", "Type", "Speak"),
         selected = state.mode.ordinal,
         onSelect = { onMode(ReviewMode.entries[it]) },
-        enabledMask = listOf(true, true, false),
         modifier = modifier,
     )
 }
@@ -288,6 +294,8 @@ private fun CardStack(
     onReveal: () -> Unit,
     onSwipe: (Rating) -> Unit,
     onTyped: (String) -> Unit,
+    onSpoken: (String) -> Unit = {},
+    onSpokenMore: (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val offsetX = remember { Animatable(0f) }
@@ -379,15 +387,6 @@ private fun CardStack(
                     size = 30.dp,
                     tint = if (copied) MnemoColors.text else MnemoColors.text3,
                 )
-                if (isMobilePlatform) {
-                    IconActionButton(
-                        MnemoIcons.Share,
-                        "Share card",
-                        onClick = { shareText(cardText) },
-                        size = 30.dp,
-                        tint = MnemoColors.text3,
-                    )
-                }
                 if (view.card.state != CardState.New) {
                     Text(
                         "recall ${(state.retrievability * 100).roundToInt()}%",
@@ -433,6 +432,11 @@ private fun CardStack(
                 }
             }
 
+            if (state.mode == ReviewMode.Speak && !state.typing) {
+                Spacer(Modifier.height(18.dp))
+                SpokenAnswer(state, onSpoken, onSpokenMore, onReveal)
+            }
+
             if (state.revealed) {
                 Spacer(Modifier.height(20.dp))
                 Box(Modifier.fillMaxWidth().height(1.dp).background(MnemoColors.outline))
@@ -460,6 +464,68 @@ private fun CardStack(
             Text("swipe the card", style = MaterialTheme.typography.labelMedium, color = MnemoColors.text3)
             Text("Good →", style = MaterialTheme.typography.labelMedium, color = MnemoColors.gradeGood)
         }
+    }
+}
+
+/**
+ * Speak mode: answer out loud like in an interview, then compare with the model answer.
+ * Each recording adds to the answer; without a recognizer (desktop) it is a text box.
+ */
+@Composable
+private fun SpokenAnswer(
+    state: ReviewUiState,
+    onSpoken: (String) -> Unit,
+    onSpokenMore: (String) -> Unit,
+    onReveal: () -> Unit,
+) {
+    var failed by remember(state.view?.card?.id) { mutableStateOf(false) }
+    val listen =
+        rememberSpeechInput(state.language) { text ->
+            failed = text == null
+            if (text != null) onSpokenMore(text)
+        }
+    if (state.revealed) {
+        if (state.spoken.isNotBlank()) {
+            Text("Your answer", style = MaterialTheme.typography.labelMedium, color = MnemoColors.text3)
+            Spacer(Modifier.height(4.dp))
+            Text(state.spoken, style = MaterialTheme.typography.bodyMedium, color = MnemoColors.text2)
+        }
+        return
+    }
+    if (SpeechInput.available) {
+        if (state.spoken.isNotBlank()) {
+            Text("You said", style = MaterialTheme.typography.labelMedium, color = MnemoColors.text3)
+            Spacer(Modifier.height(4.dp))
+            Text(state.spoken, style = MaterialTheme.typography.bodyMedium, color = MnemoColors.text)
+            Spacer(Modifier.height(12.dp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MnemoButton(
+                if (state.spoken.isBlank()) "Answer out loud" else "Add more",
+                icon = MnemoIcons.Mic,
+                primary = state.spoken.isBlank(),
+                onClick = {
+                    Speech.stop()
+                    listen()
+                },
+            )
+            if (state.spoken.isNotBlank()) MnemoButton("Show answer", primary = true, onClick = onReveal)
+        }
+        if (failed) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Didn't catch that. Try again, or just answer in your head and show the answer.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MnemoColors.text3,
+            )
+        }
+    } else {
+        MnemoTextField(
+            value = state.spoken,
+            onValueChange = onSpoken,
+            placeholder = "Say your answer out loud, or jot down the key points",
+            minLines = 3,
+        )
     }
 }
 

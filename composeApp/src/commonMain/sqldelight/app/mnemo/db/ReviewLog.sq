@@ -74,3 +74,19 @@ SELECT count(*) FROM review_log
 JOIN card ON card.id = review_log.card_id
 JOIN note ON note.id = card.note_id
 WHERE note.deck_id IN ? AND review_log.state_before = 2 AND review_log.reviewed_at >= :since;
+
+-- Per-deck counterparts of newIntroducedSince / reviewsDoneSince (a card sits in one deck,
+-- so summing these over a subtree gives the same numbers).
+newIntroducedByDeck:
+SELECT note.deck_id, count(DISTINCT review_log.card_id) AS n FROM review_log
+JOIN card ON card.id = review_log.card_id
+JOIN note ON note.id = card.note_id
+WHERE review_log.state_before = 0 AND review_log.reviewed_at >= :since
+GROUP BY note.deck_id;
+
+reviewsDoneByDeck:
+SELECT note.deck_id, count(*) AS n FROM review_log
+JOIN card ON card.id = review_log.card_id
+JOIN note ON note.id = card.note_id
+WHERE review_log.state_before = 2 AND review_log.reviewed_at >= :since
+GROUP BY note.deck_id;

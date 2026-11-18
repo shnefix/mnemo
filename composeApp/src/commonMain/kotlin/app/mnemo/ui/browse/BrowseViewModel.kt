@@ -10,6 +10,7 @@ import app.mnemo.domain.model.Deck
 import app.mnemo.domain.model.NoteType
 import app.mnemo.domain.search.SearchQuery
 import app.mnemo.domain.search.SortKey
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,8 +18,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.withIndex
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class BrowseRow(
     val view: CardView,
@@ -55,16 +61,38 @@ class BrowseViewModel(
     val state: StateFlow<BrowseUiState> = _state.asStateFlow()
     private val queryFlow = MutableStateFlow("")
     private val sortFlow = MutableStateFlow(SortKey.Due to true)
+    private val visible = MutableStateFlow(false)
     private var types: Map<Long, NoteType> = emptyMap()
+
+    private data class LoadKey(
+        val change: Int,
+        val query: String,
+        val sort: Pair<SortKey, Boolean>,
+        val decks: List<Deck>,
+    )
+
+    /** Called by the screen as it enters/leaves composition. */
+    fun setVisible(shown: Boolean) {
+        visible.value = shown
+    }
+
     private var matches: List<BrowseRepository.Match> = emptyList()
 
     init {
         viewModelScope.launch {
             types = graph.notes.noteTypes().associateBy { it.id }
-            combine(graph.cards.observeChanges(), queryFlow, sortFlow, graph.decks.observeAll()) { _, q, sort, decks ->
-                Triple(q, sort, decks)
-            }.debounce(DEBOUNCE_MS).collectLatest { (q, sort, decks) ->
-                reload(q, sort, decks)
+            // Reload only while the screen shows: once opened, this view model outlives the tab,
+            // and reloading on every grade of a review session made answering cards stutter.
+            // Coming back reloads once if anything changed in the meantime.
+            val changes =
+                graph.cards
+                    .observeChanges()
+                    .withIndex()
+                    .map { it.index }
+            combine(changes, queryFlow, sortFlow, graph.decks.observeAll(), visible) { change, q, sort, decks, shown ->
+                if (shown) LoadKey(change, q, sort, decks) else null
+            }.filterNotNull().distinctUntilChanged().debounce(DEBOUNCE_MS).collectLatest { key ->
+                reload(key.query, key.sort, key.decks)
             }
         }
     }
@@ -108,8 +136,11 @@ class BrowseViewModel(
         }
     }
 
-    private suspend fun loadRows(page: List<BrowseRepository.Match>): List<BrowseRow> =
-        graph.cards.viewsByIds(page.map { it.cardId }).map { toRow(it) }
+    /** Rendering card text for up to [MAX_RELOAD] rows is real work: keep it off the main thread. */
+    private suspend fun loadRows(page: List<BrowseRepository.Match>): List<BrowseRow> {
+        val views = graph.cards.viewsByIds(page.map { it.cardId })
+        return withContext(Dispatchers.Default) { views.map { toRow(it) } }
+    }
 
     private fun toRow(v: CardView): BrowseRow {
         val type = types[v.noteTypeId]
@@ -138,7 +169,7 @@ class BrowseViewModel(
     }
 
     /** Strips the Markdown marks a table cell shouldn't show. */
-    private fun plainText(s: String): String = s.replace(Regex("""[*_`#>]+"""), "").replace(Regex("""\s+"""), " ").trim()
+    private fun plainText(s: String): String = s.replace(MARKS, "").replace(SPACES, " ").trim()
 
     fun setQuery(q: String) {
         _state.update { it.copy(query = q) }
@@ -204,5 +235,7 @@ class BrowseViewModel(
         const val PAGE = 100
         private const val MAX_RELOAD = 1_000
         private const val DEBOUNCE_MS = 150L
+        private val MARKS = Regex("""[*_`#>]+""")
+        private val SPACES = Regex("""\s+""")
     }
 }

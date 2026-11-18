@@ -17,6 +17,4 @@ actual fun appDataDir(): String {
 
 actual val isMobilePlatform: Boolean = false
 
-actual fun shareText(text: String): Boolean = false
-
 actual fun refreshWidgets() {}

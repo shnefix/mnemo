@@ -217,9 +217,9 @@ object EnglishDeck {
         if (ids.isEmpty()) return
         val links =
             graph.cards
-                .allViews()
+                .decksAndTags()
                 .filter { "english" in it.tags }
-                .flatMap { v -> v.tags.mapNotNull { ids[it] }.map { v.card.id to it } }
+                .flatMap { p -> p.tags.mapNotNull { ids[it] }.map { p.cardId to it } }
         graph.concepts.linkMany(links)
         topicEdges.forEach { (from, to, relation) ->
             val a = ids[from] ?: return@forEach

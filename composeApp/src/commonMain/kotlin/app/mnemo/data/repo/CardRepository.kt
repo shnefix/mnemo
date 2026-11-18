@@ -2,6 +2,7 @@ package app.mnemo.data.repo
 
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToOne
+import app.mnemo.data.db.decodeTags
 import app.mnemo.data.db.toDomain
 import app.mnemo.db.MnemoDatabase
 import app.mnemo.domain.model.Card
@@ -197,4 +198,58 @@ class CardRepository(
         }
 
     suspend fun countAll(): Long = withContext(Dispatchers.IO) { q.countAll().executeAsOne() }
+
+    /** Every card, without note text: one query instead of one per card. */
+    suspend fun all(): List<Card> = withContext(Dispatchers.IO) { q.selectAll().executeAsList().map { it.toDomain() } }
+
+    /** The deck and tags of every card, without loading the note fields. */
+    suspend fun decksAndTags(): List<CardPlacement> =
+        withContext(Dispatchers.IO) {
+            q.cardDecks().executeAsList().map { CardPlacement(it.id, it.deck_id, decodeTags(it.tags)) }
+        }
+
+    /** New cards available now, by deck. */
+    suspend fun newCountByDeck(now: Long): Map<Long, Int> =
+        withContext(Dispatchers.IO) { q.newCountByDeck(now).executeAsList().associate { it.deck_id to it.n.toInt() } }
+
+    /** Learning and review cards due now, by deck: (learning + relearning, review). */
+    suspend fun dueCountByDeck(now: Long): Map<Long, Pair<Int, Int>> =
+        withContext(Dispatchers.IO) {
+            val out = HashMap<Long, Pair<Int, Int>>()
+            q.dueCountByDeck(now).executeAsList().forEach { r ->
+                val (l, rv) = out[r.deck_id] ?: (0 to 0)
+                out[r.deck_id] =
+                    when (CardState.fromCode(r.state)) {
+                        CardState.Learning, CardState.Relearning -> (l + r.n.toInt()) to rv
+                        CardState.Review -> l to (rv + r.n.toInt())
+                        CardState.New -> l to rv
+                    }
+            }
+            out
+        }
+
+    /** Cards first seen since [since], by deck. */
+    suspend fun newIntroducedByDeck(since: Long): Map<Long, Int> =
+        withContext(Dispatchers.IO) {
+            db.reviewLogQueries
+                .newIntroducedByDeck(since)
+                .executeAsList()
+                .associate { it.deck_id to it.n.toInt() }
+        }
+
+    /** Review-card answers since [since], by deck. */
+    suspend fun reviewsDoneByDeck(since: Long): Map<Long, Int> =
+        withContext(Dispatchers.IO) {
+            db.reviewLogQueries
+                .reviewsDoneByDeck(since)
+                .executeAsList()
+                .associate { it.deck_id to it.n.toInt() }
+        }
 }
+
+/** Where a card sits: its deck and its note's tags. */
+data class CardPlacement(
+    val cardId: Long,
+    val deckId: Long,
+    val tags: List<String>,
+)

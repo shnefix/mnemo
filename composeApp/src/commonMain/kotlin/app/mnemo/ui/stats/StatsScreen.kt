@@ -351,8 +351,15 @@ private suspend fun loadStats(graph: app.mnemo.di.AppGraph): StatsData {
     val ret = graph.reviewLogs.retentionSince(now - 30 * DAY_MS)
     val decks = graph.decks.all()
     val types = graph.notes.noteTypes().associateBy { it.id }
-    val views = graph.cards.allViews()
-    val viewById = views.associateBy { it.card.id }
+    // Pick the cards first (no note text), then load and render only the ones shown.
+    val leechCards = graph.cards.leeches(8)
+    val hardestCards =
+        graph.cards
+            .all()
+            .filter { it.difficulty != null }
+            .sortedByDescending { it.difficulty }
+            .take(5)
+    val viewById = graph.cards.viewsByIds((leechCards + hardestCards).map { it.id }.distinct()).associateBy { it.card.id }
 
     fun title(cardId: Long): String =
         viewById[cardId]?.let { v ->
@@ -364,12 +371,8 @@ private suspend fun loadStats(graph: app.mnemo.di.AppGraph): StatsData {
                     .first()
             }
         } ?: "card $cardId"
-    val leeches = graph.cards.leeches(8).map { title(it.id) to it.lapses }
-    val hardest =
-        views.filter { it.card.difficulty != null }.sortedByDescending { it.card.difficulty }.take(5).map {
-            title(it.card.id) to
-                (it.card.difficulty ?: 0.0)
-        }
+    val leeches = leechCards.map { title(it.id) to it.lapses }
+    val hardest = hardestCards.map { title(it.id) to (it.difficulty ?: 0.0) }
     return StatsData(
         heat = heat,
         streak = streak(byDate.keys, today),

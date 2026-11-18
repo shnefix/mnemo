@@ -381,6 +381,22 @@ object MnemoIcons {
         }
     }
 
+    val Mic: ImageVector by lazy {
+        stroke("Mic") {
+            moveTo(12f, 3f)
+            arcTo(3f, 3f, 0f, false, true, 15f, 6f)
+            lineTo(15f, 11f)
+            arcTo(3f, 3f, 0f, false, true, 9f, 11f)
+            lineTo(9f, 6f)
+            arcTo(3f, 3f, 0f, false, true, 12f, 3f)
+            close()
+            moveTo(5.5f, 10.5f)
+            arcTo(6.5f, 6.5f, 0f, false, false, 18.5f, 10.5f)
+            moveTo(12f, 17f)
+            lineTo(12f, 21f)
+        }
+    }
+
     val Copy: ImageVector by lazy {
         stroke("Copy") {
             moveTo(9f, 9f)
@@ -393,20 +409,6 @@ object MnemoIcons {
             lineTo(4f, 4f)
             lineTo(15f, 4f)
             lineTo(15f, 5f)
-        }
-    }
-
-    val Share: ImageVector by lazy {
-        stroke("Share") {
-            moveTo(12f, 3f)
-            lineTo(12f, 15f)
-            moveTo(7f, 8f)
-            lineTo(12f, 3f)
-            lineTo(17f, 8f)
-            moveTo(5f, 13f)
-            lineTo(5f, 20f)
-            lineTo(19f, 20f)
-            lineTo(19f, 13f)
         }
     }
 }

@@ -31,6 +31,17 @@ actual object Cloud {
         json: String,
     ) {}
 
+    actual suspend fun listHistory(): List<String> = emptyList()
+
+    actual suspend fun saveHistory(
+        day: String,
+        json: String,
+    ) {}
+
+    actual suspend fun loadHistory(day: String): String? = null
+
+    actual suspend fun deleteHistory(day: String) {}
+
     actual fun hash(text: String): String =
         MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
 }

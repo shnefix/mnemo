@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +27,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,10 +39,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.mnemo.LocalAppGraph
+import app.mnemo.data.io.DeckTrash
 import app.mnemo.platform.Prefs
 import app.mnemo.ui.components.DueBar
 import app.mnemo.ui.components.EmptyState
@@ -53,6 +60,7 @@ import app.mnemo.ui.components.ScreenHeader
 import app.mnemo.ui.nav.LocalWindowSize
 import app.mnemo.ui.nav.WindowSize
 import app.mnemo.ui.theme.MnemoColors
+import kotlinx.coroutines.delay
 
 @Composable
 fun DeckListScreen(
@@ -64,6 +72,10 @@ fun DeckListScreen(
 ) {
     val graph = LocalAppGraph.current
     val vm: DecksViewModel = viewModel(key = "decks") { DecksViewModel(graph) }
+    DisposableEffect(vm) {
+        vm.setVisible(true)
+        onDispose { vm.setVisible(false) }
+    }
     val state by vm.state.collectAsState()
     var showCreate by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<DeckRow?>(null) }
@@ -81,8 +93,14 @@ fun DeckListScreen(
         expanded = ids
         saveExpanded(ids)
     }
-    val collapsedPaths = state.rows.filter { it.deck.id in collapsed }.map { it.deck.path + "::" }
-    val visibleRows = state.rows.filter { r -> collapsedPaths.none { r.deck.path.startsWith(it) } }
+    // Numbered packs show as tiles inside their section instead of ~100 rows of their own.
+    val packs = remember(state.rows) { packsByParent(state.rows) }
+    val packIds = remember(packs) { packs.values.flatten().mapTo(HashSet()) { it.deck.id } }
+    val visibleRows =
+        remember(state.rows, collapsed, packIds) {
+            val collapsedPaths = state.rows.filter { it.deck.id in collapsed }.map { it.deck.path + "::" }
+            state.rows.filter { r -> r.deck.id !in packIds && collapsedPaths.none { r.deck.path.startsWith(it) } }
+        }
     val parentPaths =
         state.rows
             .mapNotNull { r ->
@@ -91,60 +109,83 @@ fun DeckListScreen(
                     .ifEmpty { null }
             }.toSet()
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = if (compact) 20.dp else 40.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        item {
-            ScreenHeader(title = "Decks", subtitle = "${state.rows.size} decks") {
-                MnemoButton("New deck", onClick = { showCreate = true }, icon = MnemoIcons.Plus, primary = true)
-                if (parentPaths.isNotEmpty()) {
-                    val allCollapsed = state.rows.filter { it.deck.path in parentPaths }.all { it.deck.id in collapsed }
-                    MnemoButton(
-                        if (allCollapsed) "Show subdecks" else "Hide subdecks",
-                        onClick = {
-                            setExpanded(
-                                if (allCollapsed) {
-                                    state.rows
-                                        .filter { it.deck.path in parentPaths }
-                                        .map { it.deck.id }
-                                        .toSet()
-                                } else {
-                                    emptySet()
-                                },
-                            )
-                        },
+    val deleted by vm.deleted.collectAsState()
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = if (compact) 20.dp else 40.dp, vertical = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item {
+                val subtitle =
+                    "${state.rows.size - packIds.size} decks" + if (packIds.isNotEmpty()) " · ${packIds.size} packs" else ""
+                ScreenHeader(title = "Decks", subtitle = subtitle) {
+                    MnemoButton("New deck", onClick = { showCreate = true }, icon = MnemoIcons.Plus, primary = true)
+                    if (parentPaths.isNotEmpty()) {
+                        val allCollapsed = state.rows.filter { it.deck.path in parentPaths }.all { it.deck.id in collapsed }
+                        MnemoButton(
+                            if (allCollapsed) "Show subdecks" else "Hide subdecks",
+                            onClick = {
+                                setExpanded(
+                                    if (allCollapsed) {
+                                        state.rows
+                                            .filter { it.deck.path in parentPaths }
+                                            .map { it.deck.id }
+                                            .toSet()
+                                    } else {
+                                        emptySet()
+                                    },
+                                )
+                            },
+                        )
+                    }
+                    // Phones have no sidebar, so Browse and Settings are reached from here.
+                    if (compact) {
+                        MnemoButton("Browse", onClick = onBrowse, icon = MnemoIcons.Search)
+                        MnemoButton("Settings", onClick = onAppSettings, icon = MnemoIcons.Settings)
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+            if (!state.loading && state.rows.isEmpty()) {
+                item {
+                    EmptyState(
+                        title = "No decks yet",
+                        body = "Create one, then add cards or import a CSV.",
+                        action = { MnemoButton("Create a deck", onClick = { showCreate = true }, primary = true) },
                     )
                 }
-                // Phones have no sidebar, so Browse and Settings are reached from here.
-                if (compact) {
-                    MnemoButton("Browse", onClick = onBrowse, icon = MnemoIcons.Search)
-                    MnemoButton("Settings", onClick = onAppSettings, icon = MnemoIcons.Settings)
+            }
+            items(visibleRows, key = { it.deck.id }) { row ->
+                Column {
+                    DeckRowItem(
+                        row = row,
+                        hasChildren = row.deck.path in parentPaths,
+                        collapsed = row.deck.id in collapsed,
+                        onToggle = { setExpanded(if (row.deck.id in expanded) expanded - row.deck.id else expanded + row.deck.id) },
+                        onReview = { onReview(row.deck.id) },
+                        onAddCards = { onAddCards(row.deck.id) },
+                        onSettings = { onSettings(row.deck.id) },
+                        onRename = { renaming = row },
+                        onDelete = { deleting = row },
+                    )
+                    val rowPacks = packs[row.deck.id]
+                    if (rowPacks != null && row.deck.id !in collapsed) {
+                        PackGrid(rowPacks, depth = row.depth + 1, onReview = { onReview(it.deck.id) })
+                    }
                 }
             }
-            Spacer(Modifier.height(12.dp))
         }
-        if (!state.loading && state.rows.isEmpty()) {
-            item {
-                EmptyState(
-                    title = "No decks yet",
-                    body = "Create one, then add cards or import a CSV.",
-                    action = { MnemoButton("Create a deck", onClick = { showCreate = true }, primary = true) },
-                )
+        deleted?.let { entry ->
+            // Undo for a few seconds; after that the deck is still in Settings › Recently deleted.
+            LaunchedEffect(entry) {
+                delay(UNDO_MS)
+                vm.dismissUndo()
             }
-        }
-        items(visibleRows, key = { it.deck.id }) { row ->
-            DeckRowItem(
-                row = row,
-                hasChildren = row.deck.path in parentPaths,
-                collapsed = row.deck.id in collapsed,
-                onToggle = { setExpanded(if (row.deck.id in expanded) expanded - row.deck.id else expanded + row.deck.id) },
-                onReview = { onReview(row.deck.id) },
-                onAddCards = { onAddCards(row.deck.id) },
-                onSettings = { onSettings(row.deck.id) },
-                onRename = { renaming = row },
-                onDelete = { deleting = row },
+            UndoBar(
+                text = "Deleted “${entry.deckPath}”",
+                onUndo = vm::undoDelete,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
             )
         }
     }
@@ -182,7 +223,7 @@ fun DeckListScreen(
             title = { Text("Delete “${row.deck.path}”?", color = MnemoColors.text) },
             text = {
                 Text(
-                    "This deletes ${row.cardCount} cards and their review history. It cannot be undone.",
+                    "This deletes ${row.cardCount} cards and their review history. You can undo it right after, or bring it back from Settings › Recently deleted for ${DeckTrash.KEEP_DAYS} days.",
                     color = MnemoColors.text2,
                 )
             },
@@ -359,3 +400,73 @@ private fun loadExpanded(): Set<Long> =
         .toSet()
 
 private fun saveExpanded(ids: Set<Long>) = Prefs.set(Prefs.DECKS_EXPANDED, ids.sorted().joinToString(","))
+
+private const val UNDO_MS = 8_000L
+
+@Composable
+private fun UndoBar(
+    text: String,
+    onUndo: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(MnemoColors.text)
+                .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MnemoColors.background,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onUndo) { Text("Undo", color = MnemoColors.coral) }
+    }
+}
+
+/** A section's packs as a grid of numbered tiles; tapping one studies that pack. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PackGrid(
+    packs: List<DeckRow>,
+    depth: Int,
+    onReview: (DeckRow) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(start = (depth * 20).dp, top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        packs.forEach { p ->
+            val due = p.due.total
+            Column(
+                modifier =
+                    Modifier
+                        .width(72.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (due > 0) MnemoColors.lime else MnemoColors.surface)
+                        .clickable(role = Role.Button) { onReview(p) }
+                        .semantics { contentDescription = "${p.deck.name}: ${p.cardCount} cards, $due due" }
+                        .padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    packNumber(p.deck.name),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (due > 0) MnemoColors.onLime else MnemoColors.text,
+                )
+                Text(
+                    if (due > 0) "$due due" else "${(p.mastery * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (due > 0) MnemoColors.onLime else MnemoColors.text2,
+                )
+            }
+        }
+    }
+}

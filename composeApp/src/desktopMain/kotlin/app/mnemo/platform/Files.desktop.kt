@@ -91,3 +91,10 @@ actual fun playAudio(path: String) {
         if (Desktop.isDesktopSupported()) Desktop.getDesktop().open(File(path))
     }
 }
+
+actual suspend fun saveSharedBackup(
+    name: String,
+    content: String,
+    prefix: String,
+    keep: Int,
+): String? = null

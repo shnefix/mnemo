@@ -23,7 +23,9 @@ import app.mnemo.data.seed.EnglishB2Deck
 import app.mnemo.data.seed.EnglishDeck
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.graph.DeckGraph
+import app.mnemo.domain.sync.CloudSync
 import app.mnemo.platform.Prefs
+import app.mnemo.platform.Speech
 import app.mnemo.ui.browse.BrowseScreen
 import app.mnemo.ui.decks.DeckListScreen
 import app.mnemo.ui.decks.DeckSettingsScreen
@@ -39,7 +41,13 @@ import app.mnemo.ui.stats.StatsScreen
 import app.mnemo.ui.theme.MnemoTheme
 import app.mnemo.ui.theme.ThemeState
 import app.mnemo.ui.today.TodayScreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/** How long launch housekeeping waits, so the first screen gets the database to itself. */
+private const val HOUSEKEEPING_DELAY_MS = 1_500L
 
 val LocalAppGraph = staticCompositionLocalOf<AppGraph> { error("AppGraph not provided") }
 
@@ -60,28 +68,26 @@ fun App(
                     onboarded = true
                 }
                 checked = true
-                // Daily safety net; never blocks the UI and never fails the launch.
-                runCatching {
-                    app.mnemo.platform.Speech
-                        .warmUp()
-                }
-                runCatching { AutoBackup.runIfDue(graph) }
-                runCatching { graph.notes.pruneTombstones() }
             }
-            // Everyone gets the built-in English deck once, in the background.
+            // Launch housekeeping waits until the first screen has loaded and then runs off the
+            // main thread, so it never competes with what you are looking at.
             LaunchedEffect(onboarded) {
-                if (onboarded) {
+                if (!onboarded) return@LaunchedEffect
+                delay(HOUSEKEEPING_DELAY_MS)
+                withContext(Dispatchers.Default) {
+                    // Everyone gets the built-in English decks once.
                     runCatching { EnglishDeck.installOnce(graph) }
                     runCatching { EnglishB2Deck.installOnce(graph) }
                     // Every deck on the knowledge graph, plus the English grammar topics.
                     runCatching { DeckGraph.sync(graph) }
                     runCatching { EnglishDeck.syncGraph(graph) }
                     // Same decks and progress as the other phones on this account.
-                    runCatching {
-                        app.mnemo.domain.sync.CloudSync
-                            .sync(graph)
-                    }
+                    runCatching { CloudSync.sync(graph) }
+                    // Daily safety net; never fails the launch.
+                    runCatching { AutoBackup.runIfDue(graph) }
+                    runCatching { graph.notes.pruneTombstones() }
                 }
+                runCatching { Speech.warmUp() }
             }
             // A newer version on GitHub: offer it once per launch.
             var update by remember { mutableStateOf<app.mnemo.platform.AppUpdate?>(null) }
@@ -89,6 +95,7 @@ fun App(
             val updateScope = androidx.compose.runtime.rememberCoroutineScope()
             LaunchedEffect(Unit) {
                 if (app.mnemo.platform.Updater.supported) {
+                    delay(HOUSEKEEPING_DELAY_MS)
                     update =
                         app.mnemo.platform.Updater
                             .check()

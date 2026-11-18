@@ -2,15 +2,25 @@ package app.mnemo.ui.decks
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.mnemo.data.io.DeckTrash
 import app.mnemo.data.repo.DueCounts
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.model.Deck
 import app.mnemo.domain.model.DeckSettings
 import app.mnemo.domain.review.DailyQueue
+import app.mnemo.domain.stats.DeckOverview
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.withIndex
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -27,16 +37,37 @@ data class DecksUiState(
     val loading: Boolean = true,
 )
 
+@OptIn(FlowPreview::class)
 class DecksViewModel(
     private val graph: AppGraph,
 ) : ViewModel() {
     private val _state = MutableStateFlow(DecksUiState())
     val state: StateFlow<DecksUiState> = _state.asStateFlow()
 
+    private val visible = MutableStateFlow(false)
+
     init {
         viewModelScope.launch {
-            graph.decks.observeAll().collect { decks -> _state.value = DecksUiState(rows = rowsFor(decks), loading = false) }
+            // Recompute when decks change and after reviews (due counts move), but only while the
+            // list shows: coming back after a review session recomputes once. collectLatest makes
+            // a burst of changes (seeding, import, grading) compute only the last state.
+            val changes =
+                graph.cards
+                    .observeChanges()
+                    .withIndex()
+                    .map { it.index }
+            combine(graph.decks.observeAll(), changes, visible) { decks, change, shown ->
+                if (shown) decks to change else null
+            }.filterNotNull()
+                .distinctUntilChanged()
+                .debounce(DEBOUNCE_MS)
+                .collectLatest { (decks, _) -> _state.value = DecksUiState(rows = rowsFor(decks), loading = false) }
         }
+    }
+
+    /** Called by the screen as it enters/leaves composition. */
+    fun setVisible(shown: Boolean) {
+        visible.value = shown
     }
 
     fun refresh() {
@@ -47,20 +78,17 @@ class DecksViewModel(
 
     private suspend fun computeRows(decks: List<Deck>): List<DeckRow> {
         val now = graph.clock.now()
-        // One pass over the cards for every row (loading them all per deck was O(decks × cards)).
-        val cardsPerDeck =
-            graph.cards
-                .allViews()
-                .groupingBy { it.deckId }
-                .eachCount()
+        // A few grouped queries for the whole list; per-deck queries were O(decks × sub-decks).
+        val queue = DailyQueue.snapshot(graph, now, decks)
+        val overview = DeckOverview.load(graph, decks)
         return decks.map { deck ->
-            val ids = graph.decks.subtreeIds(deck.id)
-            val due = DailyQueue.counts(graph, deck.id, now, decks)
-            val review = graph.cards.reviewCards(ids)
-            val scheduler = graph.scheduler(deck.settings)
-            val mastery = if (review.isEmpty()) 0.0 else review.map { scheduler.retrievability(it, now) }.average()
-            val count = ids.sumOf { cardsPerDeck[it] ?: 0 }
-            DeckRow(deck = deck, depth = deck.path.count { it == ':' } / 2, due = due, cardCount = count, mastery = mastery)
+            DeckRow(
+                deck = deck,
+                depth = deck.path.count { it == ':' } / 2,
+                due = queue.counts(deck.id),
+                cardCount = overview.cardCount(deck),
+                mastery = overview.mastery(graph, deck, now),
+            )
         }
     }
 
@@ -81,11 +109,30 @@ class DecksViewModel(
         }
     }
 
+    private val _deleted = MutableStateFlow<DeckTrash.Entry?>(null)
+
+    /** The deck just deleted, while its Undo is offered. */
+    val deleted: StateFlow<DeckTrash.Entry?> = _deleted.asStateFlow()
+
+    /** Moves the deck (and its sub-decks) to the trash and offers Undo. */
     fun delete(id: Long) {
         viewModelScope.launch {
-            graph.decks.delete(id)
+            _deleted.value = runCatching { DeckTrash.delete(graph, id) }.getOrNull()
             refresh()
         }
+    }
+
+    fun undoDelete() {
+        val entry = _deleted.value ?: return
+        _deleted.value = null
+        viewModelScope.launch {
+            runCatching { DeckTrash.restore(graph, entry) }
+            refresh()
+        }
+    }
+
+    fun dismissUndo() {
+        _deleted.value = null
     }
 
     fun updateSettings(
@@ -96,5 +143,9 @@ class DecksViewModel(
             graph.decks.updateSettings(id, settings)
             refresh()
         }
+    }
+
+    companion object {
+        private const val DEBOUNCE_MS = 150L
     }
 }

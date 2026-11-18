@@ -1,0 +1,17 @@
+# Startup profile: code Android compiles ahead of time at install, so opening the app and
+# switching tabs does not start out in the interpreter. The app is small enough to list whole;
+# Compose ships its own rules. Wildcards: ** matches across packages and members.
+HSPLapp/mnemo/**->**(**)**
+Lapp/mnemo/**;
+HSPLapp/cash/sqldelight/**->**(**)**
+Lapp/cash/sqldelight/**;
+HSPLandroidx/sqlite/**->**(**)**
+Landroidx/sqlite/**;
+HSPLkotlinx/serialization/**->**(**)**
+Lkotlinx/serialization/**;
+HSPLkotlinx/datetime/**->**(**)**
+Lkotlinx/datetime/**;
+HSPLkotlinx/coroutines/**->**(**)**
+Lkotlinx/coroutines/**;
+HSPLandroidx/navigation/**->**(**)**
+Landroidx/navigation/**;

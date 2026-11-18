@@ -131,3 +131,39 @@ SELECT count(*) FROM card;
 
 leeches:
 SELECT card.* FROM card WHERE card.lapses >= ? ORDER BY card.lapses DESC;
+
+-- Every card on its own (no note fields): mastery and weak spots load these in one go.
+selectAll:
+SELECT * FROM card;
+
+-- The deck and tags of every card, without the note text: deck sizes and graph links.
+cardDecks:
+SELECT card.id, note.deck_id, note.tags FROM card
+JOIN note ON note.id = card.note_id;
+
+-- New cards available now, per deck (the per-deck counterpart of newCards).
+newCountByDeck:
+SELECT note.deck_id, count(*) AS n FROM card
+JOIN note ON note.id = card.note_id
+WHERE card.suspended = 0 AND card.state = 0
+  AND (card.buried_until IS NULL OR card.buried_until <= :now)
+GROUP BY note.deck_id;
+
+-- Learning/review cards due now, per deck and state (the per-deck counterpart of countByStateDue).
+dueCountByDeck:
+SELECT note.deck_id, card.state, count(*) AS n FROM card
+JOIN note ON note.id = card.note_id
+WHERE card.suspended = 0
+  AND (card.buried_until IS NULL OR card.buried_until <= :now)
+  AND card.due <= :now
+GROUP BY note.deck_id, card.state;
+
+-- Changes whenever anything a sync carries changes (notes, scheduling, history, decks, deletions),
+-- without exporting the collection: lets a sync skip the export and upload when nothing moved.
+syncFingerprint:
+SELECT
+  (SELECT count(*) || ':' || total(due) || ':' || total(state) || ':' || total(suspended) || ':' || total(coalesce(buried_until, 0)) || ':' || total(reps) FROM card) AS cards,
+  (SELECT count(*) || ':' || coalesce(max(updated_at), 0) || ':' || total(length(fields_json) + length(tags)) FROM note) AS notes,
+  (SELECT count(*) || ':' || coalesce(max(reviewed_at), 0) FROM review_log) AS logs,
+  (SELECT count(*) || ':' || coalesce(group_concat(id || name || coalesce(parent_id, '') || settings_json, '|'), '') FROM deck) AS decks,
+  (SELECT count(*) || ':' || coalesce(max(deleted_at), 0) FROM deleted_note) AS deleted;

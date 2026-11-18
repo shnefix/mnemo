@@ -5,6 +5,7 @@ import app.mnemo.platform.appFileSize
 import app.mnemo.platform.deleteAppFile
 import app.mnemo.platform.listAppFiles
 import app.mnemo.platform.readAppFile
+import app.mnemo.platform.saveSharedBackup
 import app.mnemo.platform.writeAppFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -65,6 +66,8 @@ object AutoBackup {
             writeAppFile("$DIR/$name", text)
             list().drop(KEEP).forEach { deleteAppFile("$DIR/${it.name}") }
         }
+        // A second copy outside the app, which survives uninstalling it.
+        runCatching { saveSharedBackup(name, text, PREFIX, KEEP) }
         return name
     }
 
@@ -73,7 +76,8 @@ object AutoBackup {
         name: String,
     ): Int {
         val text = withContext(Dispatchers.IO) { readAppFile("$DIR/$name") } ?: error("Backup $name not found")
-        return JsonBackup.restore(graph, text)
+        // Brings back what was deleted since, without duplicating what is still here.
+        return JsonBackup.restoreDeleted(graph, text)
     }
 
     @OptIn(ExperimentalTime::class)
@@ -86,6 +90,12 @@ object AutoBackup {
         fun two(n: Int) = n.toString().padStart(2, '0')
         return "${t.year}${two(t.monthNumber)}${two(t.dayOfMonth)}-${two(t.hour)}${two(t.minute)}"
     }
+
+    /** "18.11.2026 07:45" for [epochMillis], in the same style as backup labels. */
+    fun label(epochMillis: Long): String =
+        stamp(epochMillis).let {
+            "${it.substring(6, 8)}.${it.substring(4, 6)}.${it.substring(0, 4)} ${it.substring(9, 11)}:${it.substring(11, 13)}"
+        }
 
     /** Epoch millis encoded in a backup file name (0 when unparseable, which counts as "old"). */
     @OptIn(ExperimentalTime::class)

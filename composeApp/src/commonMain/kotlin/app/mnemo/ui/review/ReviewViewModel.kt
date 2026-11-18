@@ -33,6 +33,8 @@ data class ReviewUiState(
     val finished: Boolean = false,
     val mode: ReviewMode = ReviewMode.Classic,
     val typed: String = "",
+    /** What you said (or jotted down) in Speak mode, shown next to the model answer. */
+    val spoken: String = "",
     val verdict: AnswerMatcher.Verdict? = null,
     /** Typed-answer comparison (Type mode, after reveal): verdict plus a character diff. */
     val comparison: AnswerMatcher.Result? = null,
@@ -121,6 +123,7 @@ class ReviewViewModel(
                 canUndo = session.canUndo,
                 finished = false,
                 typed = "",
+                spoken = "",
                 verdict = null,
                 comparison = null,
                 suggested = null,
@@ -151,6 +154,16 @@ class ReviewViewModel(
     }
 
     fun setTyped(text: String) = _state.update { it.copy(typed = text) }
+
+    /** Speak mode: replaces (desktop text box) or extends (each recording adds on) the answer. */
+    fun setSpoken(text: String) = _state.update { it.copy(spoken = text) }
+
+    fun addSpoken(text: String) =
+        _state.update { s ->
+            s.copy(
+                spoken = listOf(s.spoken, text).filter { it.isNotBlank() }.joinToString(" "),
+            )
+        }
 
     fun setMode(mode: ReviewMode) = _state.update { it.copy(mode = mode) }
 

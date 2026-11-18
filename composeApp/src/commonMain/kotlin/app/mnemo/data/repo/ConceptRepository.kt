@@ -55,7 +55,12 @@ class ConceptRepository(
     suspend fun linkMany(pairs: Collection<Pair<Long, Long>>) =
         withContext(Dispatchers.IO) {
             if (pairs.isEmpty()) return@withContext
-            db.transaction { pairs.forEach { (card, concept) -> q.link(card, concept) } }
+            // Skip links that already exist, so the launch-time syncs write nothing (and hold no
+            // write lock) on an ordinary launch.
+            val known = q.allLinks().executeAsList().mapTo(HashSet()) { it.card_id to it.concept_id }
+            val missing = pairs.filter { it !in known }
+            if (missing.isEmpty()) return@withContext
+            db.transaction { missing.forEach { (card, concept) -> q.link(card, concept) } }
         }
 
     suspend fun unlink(

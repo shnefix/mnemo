@@ -1,5 +1,25 @@
 # Progress
 
+## Done — Smoothness and safety (18 Nov 2026)
+
+- **Speed**: Today and Decks compute due counts, card counts and mastery for every deck from a
+  few grouped queries (`DailyQueue.snapshot`, `domain/stats/DeckOverview.kt`); weak spots load all
+  cards in one query; Today shows top-level decks only; Browse, Today and Decks recompute only while
+  shown; launch housekeeping waits 1.5 s and runs off the main thread; cloud sync never runs on the
+  main thread; SQLite uses WAL; Stats loads text only for the cards it names; a startup profile
+  (`androidMain/baseline-prof.txt`) pre-compiles the app at install.
+- **Deck trash** (`data/io/DeckTrash.kt`): deleting a deck saves it (sub-decks, cards, history) to
+  `trash/` for 30 days; Undo on the Decks tab, restore from Settings › Recently deleted.
+- **Safe restores** (`JsonBackup.restoreDeleted`): backups, the trash and cloud copies bring back
+  missing notes without duplicating or reverting what is still there.
+- **Backups outside the app**: daily backups and exported files also go to Download/Mnemo; signed-in
+  phones keep 7 daily cloud copies (`users/{uid}/history/{day}`) under Settings › Cloud copies.
+- **Sync skips** the export and upload when nothing changed on either side (`syncFingerprint`).
+- **Packs** ("Vocabulary 07") show as tiles inside their section on the Decks tab (`ui/decks/Packs.kt`).
+- **Speak mode**: a mock interview — the question is read out, you answer out loud (system speech
+  recognizer), then compare with the model answer.
+- Removed the share button from cards.
+
 ## Done — Hardening (Nov 2026)
 
 - **Built-in English (B1–B2) deck** (`data/seed/`): installed once per install (flag
@@ -32,7 +52,13 @@
 - **Release signing**: `keystore.properties` (gitignored) points at a dedicated release key in
   `~/.config/mnemo/release.jks`; without it, or with `make phone SIGN=debug`
   (`-Pmnemo.signing=debug`), release uses the debug key. Back the key up. The Android version
-  code is the commit count. `make phone-test` runs the on-device tests without uninstalling.
+  code is the commit count.
+- **On-device tests run in their own install**: the debug build type has
+  `applicationIdSuffix = ".debug"` (label "Mnemo (test)"), so `make phone-test` installs
+  `app.mnemo.debug` beside the real `app.mnemo` with a separate database, and Gradle
+  uninstalls it afterwards. Firebase settings are only added to release (no sync in the test
+  build, so it cannot push test decks to the account), and `Updater.supported` is true only for
+  `app.mnemo` (the release APK must not install over the test build).
 - **Sync**: notes carry a stable `uid` (schema v2, `1.sqm`), and deletions leave tombstones
   (`deleted_note`) that travel in backups, so deleted notes stay deleted and notes stamped with
   the same time (an `.apkg` import) no longer fold together. Old backups still match by deck +

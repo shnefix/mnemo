@@ -8,15 +8,18 @@ import app.mnemo.domain.graph.WeakSpots
 import app.mnemo.domain.model.DAY_MS
 import app.mnemo.domain.model.Deck
 import app.mnemo.domain.review.DailyQueue
+import app.mnemo.domain.stats.DeckOverview
 import app.mnemo.domain.stats.localDate
 import app.mnemo.domain.stats.reviewsByLocalDate
 import app.mnemo.domain.stats.streak
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 
@@ -59,12 +62,14 @@ class TodayViewModel(
 
     private var visible = false
     private var stale = true
+    private var job: Job? = null
 
     init {
         viewModelScope.launch {
             // Grading a card touches the card table on every answer; coalesce those
-            // bursts and only recompute while the screen is actually showing.
-            graph.cards.observeChanges().debounce(DEBOUNCE_MS).collect {
+            // bursts and only recompute while the screen is actually showing. The first
+            // value is the current state, which the screen's own first refresh covers.
+            graph.cards.observeChanges().drop(1).debounce(DEBOUNCE_MS).collect {
                 if (visible) refresh() else stale = true
             }
         }
@@ -78,69 +83,72 @@ class TodayViewModel(
 
     fun refresh() {
         stale = false
-        viewModelScope.launch(Dispatchers.Default) {
-            val now = graph.clock.now()
-            val today = localDate(now)
-            val decks = graph.decks.all()
-            val allIds = decks.map { it.id }
-            // Same queue "Start review" builds for all decks, so the headline matches the session.
-            val due = DailyQueue.counts(graph, null, now, decks)
-            val rows =
-                decks.map { d ->
-                    val ids = graph.decks.subtreeIds(d.id)
-                    val dueD = DailyQueue.counts(graph, d.id, now, decks)
-                    val review = graph.cards.reviewCards(ids)
-                    val sched = graph.scheduler(d.settings)
-                    val mastery = if (review.isEmpty()) 0.0 else review.map { sched.retrievability(it, now) }.average()
-                    TodayDeck(d, dueD, mastery, 0)
-                }
-            val daily = graph.reviewLogs.dailyCounts(now - 400 * DAY_MS)
-            val byDate = reviewsByLocalDate(daily)
-            val days = byDate.keys
-            val week = (6 downTo 0).map { back -> LocalDate.fromEpochDays(today.toEpochDays() - back) in days }
-            val retention = graph.reviewLogs.retentionSince(now - 30 * DAY_MS).ratio
-            val reviewedToday = byDate[today] ?: 0
-            val minutesToday =
-                (
-                    daily
-                        .filter {
-                            localDate(
-                                it.dayIndex * DAY_MS + DAY_MS / 2,
-                            ) == today
-                        }.sumOf { it.timeMs } / 60_000L
-                ).toInt()
-            val forecast = graph.cards.forecast(allIds, now, 30)
-            val weakest = conceptMastery(now).sortedBy { it.mastery }.take(3)
-            val avgMs =
-                graph.reviewLogs.since(now - 30 * DAY_MS).let { logs ->
-                    if (logs.isEmpty()) 8_000L else logs.map { it.responseMs }.average().toLong()
-                }
-            _state.value =
-                TodayUiState(
-                    loading = false,
-                    today = today,
-                    due = due,
-                    estimatedMinutes =
-                        ((due.total * avgMs.coerceIn(3_000, 30_000)) / 60_000L).toInt().coerceAtLeast(
-                            if (due.total >
-                                0
-                            ) {
-                                1
-                            } else {
-                                0
-                            },
-                        ),
-                    streak = streak(days, today),
-                    weekDays = week,
-                    retention = retention,
-                    reviewedToday = reviewedToday,
-                    minutesToday = minutesToday,
-                    decks = rows,
-                    forecast = forecast,
-                    weakest = weakest,
-                    totalCards = graph.cards.countAll().toInt(),
-                )
-        }
+        // A newer refresh makes a running one pointless; overlapping ones fought over the database.
+        job?.cancel()
+        job =
+            viewModelScope.launch(Dispatchers.Default) {
+                val now = graph.clock.now()
+                val today = localDate(now)
+                val decks = graph.decks.all()
+                val allIds = decks.map { it.id }
+                // Same queue "Start review" builds for all decks, so the headline matches the session.
+                val queue = DailyQueue.snapshot(graph, now, decks)
+                val due = queue.counts(null)
+                val overview = DeckOverview.load(graph, decks)
+                // Top-level decks only (their numbers include their sub-decks): the built-in decks have
+                // hundreds of small packs, and a tile for each made Today slow to draw. The Decks tab
+                // has the whole tree.
+                val rows =
+                    decks
+                        .filter { it.parentId == null }
+                        .map { d -> TodayDeck(d, queue.counts(d.id), overview.mastery(graph, d, now), 0) }
+                val daily = graph.reviewLogs.dailyCounts(now - 400 * DAY_MS)
+                val byDate = reviewsByLocalDate(daily)
+                val days = byDate.keys
+                val week = (6 downTo 0).map { back -> LocalDate.fromEpochDays(today.toEpochDays() - back) in days }
+                val retention = graph.reviewLogs.retentionSince(now - 30 * DAY_MS).ratio
+                val reviewedToday = byDate[today] ?: 0
+                val minutesToday =
+                    (
+                        daily
+                            .filter {
+                                localDate(
+                                    it.dayIndex * DAY_MS + DAY_MS / 2,
+                                ) == today
+                            }.sumOf { it.timeMs } / 60_000L
+                    ).toInt()
+                val forecast = graph.cards.forecast(allIds, now, 30)
+                val weakest = conceptMastery(now).sortedBy { it.mastery }.take(3)
+                val avgMs =
+                    graph.reviewLogs.since(now - 30 * DAY_MS).let { logs ->
+                        if (logs.isEmpty()) 8_000L else logs.map { it.responseMs }.average().toLong()
+                    }
+                _state.value =
+                    TodayUiState(
+                        loading = false,
+                        today = today,
+                        due = due,
+                        estimatedMinutes =
+                            ((due.total * avgMs.coerceIn(3_000, 30_000)) / 60_000L).toInt().coerceAtLeast(
+                                if (due.total >
+                                    0
+                                ) {
+                                    1
+                                } else {
+                                    0
+                                },
+                            ),
+                        streak = streak(days, today),
+                        weekDays = week,
+                        retention = retention,
+                        reviewedToday = reviewedToday,
+                        minutesToday = minutesToday,
+                        decks = rows,
+                        forecast = forecast,
+                        weakest = weakest,
+                        totalCards = graph.cards.countAll().toInt(),
+                    )
+            }
     }
 
     /** Concepts you have started (see [WeakSpots.mastery]); unstudied ones are not "weak", just new. */

@@ -45,10 +45,22 @@ expect fun rememberFilePicker(
     onPicked: (PickedFile?) -> Unit,
 ): () -> Unit
 
-/** Writes [content] somewhere the user chose (or the app folder on Android). Returns the path, or null on cancel. */
+/** Writes [content] somewhere the user chose (Download/Mnemo on Android). Returns the path, or null on cancel. */
 expect suspend fun saveTextFile(
     suggestedName: String,
     content: String,
+): String?
+
+/**
+ * Copies a backup where it survives removing the app (Download/Mnemo on Android), keeping the
+ * newest [keep] files whose names start with [prefix]. Returns where it went, or null when the
+ * platform has no such place (desktop data already lives outside the app).
+ */
+expect suspend fun saveSharedBackup(
+    name: String,
+    content: String,
+    prefix: String,
+    keep: Int,
 ): String?
 
 /** Media files (images, audio) imported with decks, stored under the app data folder. */

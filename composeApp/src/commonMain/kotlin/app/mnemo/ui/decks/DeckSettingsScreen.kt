@@ -172,11 +172,10 @@ fun DeckSettingsScreen(
                     options = listOf("Classic", "Type", "Speak"),
                     selected = s.mode.ordinal,
                     onSelect = { s = s.copy(mode = ReviewMode.entries[it]) },
-                    enabledMask = listOf(true, true, false),
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Type: you type the answer and Mnemo checks it (exact match now; AI grading in Phase 4). Speak needs AI (Phase 4).",
+                    "Type: you type the answer and Mnemo checks it. Speak: a mock interview — the question is read out, you answer out loud, then compare with the model answer.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MnemoColors.text2,
                 )

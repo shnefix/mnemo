@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -66,6 +67,10 @@ fun BrowseScreen(
 ) {
     val graph = LocalAppGraph.current
     val vm: BrowseViewModel = viewModel(key = "browse") { BrowseViewModel(graph) }
+    DisposableEffect(vm) {
+        vm.setVisible(true)
+        onDispose { vm.setVisible(false) }
+    }
     val state by vm.state.collectAsState()
     val compact = LocalWindowSize.current == WindowSize.Compact
     var tagDialog by remember { mutableStateOf(false) }
