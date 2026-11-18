@@ -21,6 +21,8 @@ sealed interface Route {
         val deckId: Long? = null,
     ) : Route
 
+    @Serializable data object Quiz : Route
+
     @Serializable data object Stats : Route
 
     @Serializable data object Settings : Route

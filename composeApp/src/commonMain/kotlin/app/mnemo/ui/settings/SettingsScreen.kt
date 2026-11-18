@@ -20,6 +20,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -397,7 +398,11 @@ fun SettingsScreen() {
                     MnemoButton("Restore from JSON…", onClick = pickJson)
                 }
                 Spacer(Modifier.height(16.dp))
-                Eyebrow("Sync with another phone")
+                AccountSection(graph)
+                Spacer(Modifier.height(16.dp))
+                UpdatesSection()
+                Spacer(Modifier.height(16.dp))
+                Eyebrow("Sync with a file (no account)")
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "Save a sync file to Google Drive (or any shared folder) on one phone, then choose it on the other. " +
@@ -491,4 +496,107 @@ fun SettingsScreen() {
             }
         }
     }
+}
+
+/** Google account: the same decks and progress on every phone signed in to it. */
+@Composable
+private fun AccountSection(graph: app.mnemo.di.AppGraph) {
+    if (!app.mnemo.platform.Cloud.supported) return
+    val scope = rememberCoroutineScope()
+    val status by app.mnemo.domain.sync.CloudSync.status
+        .collectAsState()
+    var email by remember {
+        mutableStateOf(
+            app.mnemo.platform.Cloud
+                .userEmail(),
+        )
+    }
+    var error by remember { mutableStateOf<String?>(null) }
+    Eyebrow("Account & sync")
+    Spacer(Modifier.height(6.dp))
+    Text(
+        if (email == null) {
+            "Sign in with Google on each phone to keep the same decks and progress on all of them. " +
+                "Syncs by itself when you open and leave the app."
+        } else {
+            "Signed in as $email. " +
+                when (val st = status) {
+                    is app.mnemo.domain.sync.CloudSync.Status.Syncing -> "Syncing…"
+                    is app.mnemo.domain.sync.CloudSync.Status.Done ->
+                        "Synced${if (st.changed > 0) " — ${st.changed} notes updated from your other phone" else ""}."
+                    is app.mnemo.domain.sync.CloudSync.Status.Failed -> "Last sync failed: ${st.message}"
+                    else -> ""
+                }
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MnemoColors.text2,
+    )
+    error?.let {
+        Spacer(Modifier.height(4.dp))
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    }
+    Spacer(Modifier.height(8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (email == null) {
+            MnemoButton("Sign in with Google", onClick = {
+                scope.launch {
+                    error = null
+                    app.mnemo.domain.sync.CloudSync
+                        .signIn(graph)
+                        .onSuccess { email = it }
+                        .onFailure { error = "Sign-in failed: ${it.message}" }
+                }
+            })
+        } else {
+            MnemoButton(
+                "Sync now",
+                enabled = status !is app.mnemo.domain.sync.CloudSync.Status.Syncing,
+                onClick = {
+                    scope.launch {
+                        app.mnemo.domain.sync.CloudSync
+                            .sync(graph)
+                    }
+                },
+            )
+            MnemoButton("Sign out", onClick = {
+                scope.launch {
+                    app.mnemo.domain.sync.CloudSync
+                        .signOut()
+                    email = null
+                }
+            })
+        }
+    }
+}
+
+@Composable
+private fun UpdatesSection() {
+    if (!app.mnemo.platform.Updater.supported) return
+    val scope = rememberCoroutineScope()
+    var note by remember { mutableStateOf<String?>(null) }
+    Eyebrow("Updates")
+    Spacer(Modifier.height(6.dp))
+    Text(
+        "Version ${app.mnemo.platform.Updater.currentVersionName()}. New versions are checked for each time the app opens." +
+            (note?.let { " $it" } ?: ""),
+        style = MaterialTheme.typography.bodySmall,
+        color = MnemoColors.text2,
+    )
+    Spacer(Modifier.height(8.dp))
+    MnemoButton("Check for updates", onClick = {
+        scope.launch {
+            note = "Checking…"
+            val u =
+                app.mnemo.platform.Updater
+                    .check()
+            note =
+                if (u == null) {
+                    "You have the latest version."
+                } else {
+                    app.mnemo.platform.Updater
+                        .install(u)
+                    "Installing ${u.versionName}…"
+                }
+        }
+    })
 }

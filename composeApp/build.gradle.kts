@@ -105,6 +105,14 @@ kotlin {
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.sqldelight.android.driver)
                 implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+                // Account + sync (Google sign-in, Firestore).
+                implementation(project.dependencies.platform(libs.firebase.bom))
+                implementation(libs.firebase.auth)
+                implementation(libs.firebase.firestore)
+                implementation(libs.kotlinx.coroutines.play.services)
+                implementation(libs.androidx.credentials)
+                implementation(libs.androidx.credentials.play)
+                implementation(libs.googleid)
             }
             // On-device tests (`./gradlew :composeApp:connectedDebugAndroidTest` with a phone attached).
             val androidInstrumentedTest by getting {
@@ -144,7 +152,28 @@ if (androidSdkPresent) {
             versionCode = gitCommitCount
             versionName = "0.1.$gitCommitCount"
             testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+            // Firebase settings from google-services.json (gitignored), read here instead of via
+            // the google-services plugin. Without the file the app builds with sync turned off.
+            file("google-services.json").takeIf { it.exists() }?.let { f ->
+                @Suppress("UNCHECKED_CAST")
+                val root = groovy.json.JsonSlurper().parse(f) as Map<String, Any?>
+                val info = root["project_info"] as Map<String, Any?>
+                val client = (root["client"] as List<Map<String, Any?>>).first()
+                val appId = (client["client_info"] as Map<String, Any?>)["mobilesdk_app_id"] as String
+                val apiKey = ((client["api_key"] as List<Map<String, Any?>>).first())["current_key"] as String
+                val webClient =
+                    (client["oauth_client"] as? List<Map<String, Any?>>).orEmpty().firstOrNull { it["client_type"] == 3 }?.get(
+                        "client_id",
+                    ) as String?
+                resValue("string", "google_app_id", appId)
+                resValue("string", "google_api_key", apiKey)
+                resValue("string", "project_id", info["project_id"] as String)
+                resValue("string", "gcm_defaultSenderId", info["project_number"] as String)
+                (info["storage_bucket"] as String?)?.let { resValue("string", "google_storage_bucket", it) }
+                webClient?.let { resValue("string", "default_web_client_id", it) }
+            }
         }
+        buildFeatures { resValues = true }
         packaging {
             resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
         }

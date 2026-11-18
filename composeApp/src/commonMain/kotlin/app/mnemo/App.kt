@@ -39,6 +39,7 @@ import app.mnemo.ui.stats.StatsScreen
 import app.mnemo.ui.theme.MnemoTheme
 import app.mnemo.ui.theme.ThemeState
 import app.mnemo.ui.today.TodayScreen
+import kotlinx.coroutines.launch
 
 val LocalAppGraph = staticCompositionLocalOf<AppGraph> { error("AppGraph not provided") }
 
@@ -75,7 +76,48 @@ fun App(
                     // Every deck on the knowledge graph, plus the English grammar topics.
                     runCatching { DeckGraph.sync(graph) }
                     runCatching { EnglishDeck.syncGraph(graph) }
+                    // Same decks and progress as the other phones on this account.
+                    runCatching {
+                        app.mnemo.domain.sync.CloudSync
+                            .sync(graph)
+                    }
                 }
+            }
+            // A newer version on GitHub: offer it once per launch.
+            var update by remember { mutableStateOf<app.mnemo.platform.AppUpdate?>(null) }
+            var updateError by remember { mutableStateOf<String?>(null) }
+            val updateScope = androidx.compose.runtime.rememberCoroutineScope()
+            LaunchedEffect(Unit) {
+                if (app.mnemo.platform.Updater.supported) {
+                    update =
+                        app.mnemo.platform.Updater
+                            .check()
+                }
+            }
+            update?.let { u ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { update = null },
+                    title = { androidx.compose.material3.Text("Update available") },
+                    text = {
+                        androidx.compose.material3.Text(
+                            "Mnemo ${u.versionName} is ready." + (updateError?.let { "\n\n$it" } ?: "") +
+                                (u.notes.takeIf { it.isNotBlank() }?.let { "\n\n$it" } ?: ""),
+                        )
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            updateScope.launch {
+                                app.mnemo.platform.Updater
+                                    .install(u)
+                                    .onSuccess { update = null }
+                                    .onFailure { updateError = it.message }
+                            }
+                        }) { androidx.compose.material3.Text("Install") }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { update = null }) { androidx.compose.material3.Text("Later") }
+                    },
+                )
             }
             if (!checked) return@MnemoTheme
             if (!onboarded) {
@@ -90,7 +132,7 @@ fun App(
                     NavSection.entries.firstOrNull { section ->
                         routeName.substringBefore('/').substringBefore('?').endsWith(section.route::class.simpleName ?: "~")
                     }
-                val isFocus = routeName.contains("Route.Review") || routeName.contains("Route.Editor")
+                val isFocus = routeName.contains("Route.Review") || routeName.contains("Route.Editor") || routeName.contains("Route.Quiz")
 
                 fun goHome() {
                     nav.navigate(Route.Today) {
@@ -133,7 +175,12 @@ fun App(
                                 onAddCards = { nav.navigate(Route.Editor()) },
                                 onDecks = { nav.navigate(Route.Decks) { launchSingleTop = true } },
                                 onWeakSpots = { nav.navigate(Route.Review(weak = true)) },
+                                onQuiz = { nav.navigate(Route.Quiz) },
                             )
+                        }
+                        composable<Route.Quiz> {
+                            app.mnemo.ui.quiz
+                                .QuizScreen(onExit = { if (!nav.popBackStack()) goHome() })
                         }
                         composable<Route.Decks> {
                             DeckListScreen(

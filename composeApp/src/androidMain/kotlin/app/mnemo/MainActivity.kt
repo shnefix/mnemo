@@ -11,13 +11,17 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.reminder.Reminder
+import app.mnemo.domain.sync.CloudSync
 import app.mnemo.platform.ReminderScheduler
 import app.mnemo.platform.appContext
+import app.mnemo.platform.currentActivity
 import app.mnemo.platform.refreshWidgets
 import app.mnemo.ui.theme.ThemeState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
@@ -28,6 +32,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         appContext = applicationContext
+        currentActivity = java.lang.ref.WeakReference(this)
         if (savedInstanceState == null && intent.wantsReview()) reviewRequests++
         val theme = ThemeState.fromPrefs()
         setContent {
@@ -48,8 +53,17 @@ class MainActivity : ComponentActivity() {
         if (intent.wantsReview()) reviewRequests++
     }
 
+    override fun onStart() {
+        super.onStart()
+        currentActivity = java.lang.ref.WeakReference(this)
+        // Pick up what the other phone did while this one was in the background.
+        GraphHolder.peek()?.let { g -> lifecycleScope.launch { CloudSync.sync(g) } }
+    }
+
     override fun onStop() {
         super.onStop()
+        // Push this session's reviews so the other phone sees them.
+        GraphHolder.peek()?.let { g -> lifecycleScope.launch { CloudSync.sync(g) } }
         // Reviews or imports may have changed what is due.
         refreshWidgets()
     }

@@ -26,8 +26,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +61,7 @@ fun TodayScreen(
     onAddCards: () -> Unit,
     onDecks: () -> Unit,
     onWeakSpots: () -> Unit,
+    onQuiz: () -> Unit = {},
 ) {
     val graph = LocalAppGraph.current
     val vm: TodayViewModel = viewModel(key = "today") { TodayViewModel(graph) }
@@ -85,6 +90,7 @@ fun TodayScreen(
                 }
             }
             Spacer(Modifier.height(20.dp))
+            QuizBanner(onQuiz)
 
             // Hero: due now (Design C block, Design A numbers)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -469,4 +475,28 @@ fun prettyDate(d: LocalDate): String {
             .lowercase()
             .replaceFirstChar { it.uppercase() }
     return "$dow, ${d.day} $month"
+}
+
+/** "Today's quiz" from Claude, shown while a quiz is waiting to be taken. */
+@Composable
+private fun QuizBanner(onQuiz: () -> Unit) {
+    var waiting by remember { mutableStateOf<app.mnemo.domain.quiz.DailyQuiz.Quiz?>(null) }
+    LaunchedEffect(Unit) {
+        waiting =
+            app.mnemo.domain.quiz.DailyQuiz
+                .latest()
+                ?.takeIf { it.second == null }
+                ?.first
+    }
+    val q = waiting ?: return
+    Panel(color = MnemoColors.lavender, onClick = onQuiz, modifier = Modifier.fillMaxWidth()) {
+        Eyebrow("Today's quiz from Claude", color = MnemoColors.onLavender)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "${q.questions.size} questions on what you studied — see what stuck.",
+            style = MaterialTheme.typography.titleMedium,
+            color = MnemoColors.onLavender,
+        )
+    }
+    Spacer(Modifier.height(16.dp))
 }
