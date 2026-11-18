@@ -4,13 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.mnemo.data.repo.DueCounts
 import app.mnemo.di.AppGraph
+import app.mnemo.domain.graph.WeakSpots
 import app.mnemo.domain.model.DAY_MS
 import app.mnemo.domain.model.Deck
-import app.mnemo.domain.model.DeckSettings
 import app.mnemo.domain.review.DailyQueue
 import app.mnemo.domain.stats.localDate
 import app.mnemo.domain.stats.reviewsByLocalDate
 import app.mnemo.domain.stats.streak
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,7 +78,7 @@ class TodayViewModel(
 
     fun refresh() {
         stale = false
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             val now = graph.clock.now()
             val today = localDate(now)
             val decks = graph.decks.all()
@@ -142,19 +143,12 @@ class TodayViewModel(
         }
     }
 
-    private suspend fun conceptMastery(now: Long): List<ConceptMastery> {
-        val concepts = graph.concepts.all()
-        if (concepts.isEmpty()) return emptyList()
-        val links = graph.concepts.allLinks()
-        val sched = graph.scheduler(DeckSettings())
-        return concepts.mapNotNull { c ->
-            val ids = links[c.id] ?: return@mapNotNull null
-            if (ids.isEmpty()) return@mapNotNull null
-            val cards = ids.mapNotNull { graph.cards.byId(it) }
-            val m = cards.map { sched.retrievability(it, now) }.average()
-            ConceptMastery(c.id, c.name, m, cards.size)
-        }
-    }
+    /** Concepts you have started (see [WeakSpots.mastery]); unstudied ones are not "weak", just new. */
+    private suspend fun conceptMastery(now: Long): List<ConceptMastery> =
+        WeakSpots
+            .scores(graph, now)
+            .filter { it.started }
+            .map { ConceptMastery(it.conceptId, it.name, it.mastery, it.cardIds.size) }
 
     companion object {
         private const val DEBOUNCE_MS = 400L

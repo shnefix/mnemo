@@ -259,7 +259,7 @@ fun TodayScreen(
                 Panel(modifier = Modifier.weight(1f)) {
                     Text("Weakest concepts", style = MaterialTheme.typography.headlineSmall, color = MnemoColors.text)
                     Text(
-                        "Mastery = average recall chance of a concept’s cards",
+                        "Mastery = average recall chance of the cards you have studied",
                         style = MaterialTheme.typography.bodySmall,
                         color = MnemoColors.text2,
                     )

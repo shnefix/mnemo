@@ -51,6 +51,16 @@ actual object Speech {
                         )}')",
                     )
             }
-        runCatching { ProcessBuilder(cmd).redirectErrorStream(true).start() }
+        stop()
+        current = runCatching { ProcessBuilder(cmd).redirectErrorStream(true).start() }.getOrNull()
+    }
+
+    @Volatile private var current: Process? = null
+
+    actual fun warmUp() {}
+
+    actual fun stop() {
+        current?.destroy()
+        current = null
     }
 }

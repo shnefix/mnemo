@@ -21,8 +21,6 @@ sealed interface Route {
         val deckId: Long? = null,
     ) : Route
 
-    @Serializable data object Graph : Route
-
     @Serializable data object Stats : Route
 
     @Serializable data object Settings : Route
@@ -40,6 +38,5 @@ enum class NavSection(
     Today("Today", Route.Today),
     Decks("Decks", Route.Decks),
     Browse("Browse", Route.Browse),
-    Graph("Graph", Route.Graph),
     Stats("Stats", Route.Stats),
 }

@@ -45,6 +45,9 @@ data class ReviewUiState(
     val leechThreshold: Int = 8,
 ) {
     val progress: Float get() = if (total == 0) 0f else done.toFloat() / total
+
+    /** Typing the answer: in Type mode, and always on dictation cards (there is nothing else to do). */
+    val typing: Boolean get() = rendered?.expected != null && (mode == ReviewMode.Type || rendered.listen != null)
 }
 
 class ReviewViewModel(
@@ -57,6 +60,7 @@ class ReviewViewModel(
     private lateinit var session: ReviewSession
     private var types: Map<Long, NoteType> = emptyMap()
     private var shownAt: Long = 0
+    private var deckLanguage: String? = null
 
     init {
         viewModelScope.launch {
@@ -76,6 +80,7 @@ class ReviewViewModel(
                     language = deck?.settings?.language,
                 )
             }
+            deckLanguage = deck?.settings?.language
             showNext()
         }
     }
@@ -120,6 +125,8 @@ class ReviewViewModel(
                 comparison = null,
                 suggested = null,
                 retrievability = scheduler.retrievability(view.card, shownAt),
+                // The card's own deck decides the voice, so "All decks" can still read English cards.
+                language = deckSettings.language ?: deckLanguage,
                 leechThreshold = deckSettings.leechThreshold,
             )
         }
@@ -128,7 +135,7 @@ class ReviewViewModel(
     fun reveal() {
         val s = _state.value
         if (s.revealed || s.view == null) return
-        if (s.mode == ReviewMode.Type && s.rendered?.expected != null) {
+        if (s.typing && s.rendered?.expected != null) {
             val comparison = AnswerMatcher.compare(s.typed, s.rendered.expected)
             val fast = graph.clock.now() - shownAt < 6_000
             val suggested =

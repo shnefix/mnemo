@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -96,7 +97,18 @@ fun ReviewScreen(
     val compact = LocalWindowSize.current == WindowSize.Compact
     val focus = remember { FocusRequester() }
 
-    LaunchedEffect(state.view?.card?.id) { if (state.mode != ReviewMode.Type) focus.requestFocus() }
+    // Engine starts with the screen, and leaving the screen silences it.
+    DisposableEffect(Unit) {
+        Speech.warmUp()
+        onDispose { Speech.stop() }
+    }
+    LaunchedEffect(state.view?.card?.id) {
+        // A new card (swipe/grade) cuts off the previous card's audio.
+        Speech.stop()
+        if (!state.typing) focus.requestFocus()
+        // Dictation cards read their sentence aloud as soon as they appear.
+        state.rendered?.listen?.let { if (Speech.available) Speech.speak(it, state.language) }
+    }
     LaunchedEffect(state.toast) {
         if (state.toast != null) {
             delay(2200)
@@ -112,7 +124,7 @@ fun ReviewScreen(
             .focusable()
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                if (state.mode == ReviewMode.Type &&
+                if (state.typing &&
                     !state.revealed &&
                     e.key != Key.Enter &&
                     e.key != Key.Escape
@@ -189,7 +201,7 @@ fun ReviewScreen(
                                 Spacer(Modifier.height(16.dp))
                                 if (!state.revealed) {
                                     MnemoButton(
-                                        if (state.mode == ReviewMode.Type) "Check answer" else "Show answer",
+                                        if (state.typing) "Check answer" else "Show answer",
                                         onClick = vm::reveal,
                                         modifier = Modifier.fillMaxWidth(),
                                         height = 60.dp,
@@ -338,7 +350,7 @@ private fun CardStack(
                     )
                 }.clip(RoundedCornerShape(32.dp))
                 .background(MnemoColors.surface)
-                .clickable(enabled = !state.revealed && state.mode != ReviewMode.Type, role = Role.Button, onClick = onReveal)
+                .clickable(enabled = !state.revealed && !state.typing, role = Role.Button, onClick = onReveal)
                 .padding(if (compact) 22.dp else 32.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -386,22 +398,27 @@ private fun CardStack(
             }
             Spacer(Modifier.height(18.dp))
             MarkdownText(rendered?.question.orEmpty())
-            if (state.language != null && Speech.available) {
+            val listen = rendered?.listen
+            if ((state.language != null || listen != null) && Speech.available) {
                 Spacer(Modifier.height(10.dp))
                 MnemoButton(
-                    "Listen",
+                    if (listen != null) "Listen again" else "Listen",
                     icon = MnemoIcons.Speaker,
                     height = 36.dp,
                     onClick = {
                         Speech.speak(
-                            if (state.revealed) rendered?.answer.orEmpty() else rendered?.question.orEmpty(),
+                            listen ?: if (state.revealed) rendered?.answer.orEmpty() else rendered?.question.orEmpty(),
                             state.language,
                         )
                     },
                 )
+            } else if (listen != null && !state.revealed) {
+                // No voice on this device: show the sentence, so the card still works as a typing drill.
+                Spacer(Modifier.height(10.dp))
+                Text("No voice available — read it: $listen", style = MaterialTheme.typography.bodyMedium, color = MnemoColors.text2)
             }
 
-            if (state.mode == ReviewMode.Type && rendered?.expected != null) {
+            if (state.typing) {
                 Spacer(Modifier.height(18.dp))
                 if (!state.revealed) {
                     MnemoTextField(

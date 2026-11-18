@@ -17,7 +17,6 @@ import app.mnemo.platform.Clock
 import app.mnemo.ui.browse.BrowseScreen
 import app.mnemo.ui.decks.DeckListScreen
 import app.mnemo.ui.editor.NoteEditorScreen
-import app.mnemo.ui.graph.GraphScreen
 import app.mnemo.ui.nav.AdaptiveScaffold
 import app.mnemo.ui.nav.NavSection
 import app.mnemo.ui.nav.WindowSizeProvider
@@ -148,6 +147,17 @@ class ScreenshotTest {
                 g.concepts.link(it.card.id, c2)
             }
             cards.filter { it.deckName == "Enzymes" }.forEachIndexed { idx, v -> g.concepts.link(v.card.id, if (idx < 2) c3 else c4) }
+            // Cards added after the reviews stay new: one concept not started, one partly studied.
+            val idioms = g.decks.createByPath("English::Idioms")
+            listOf("break the ice", "a piece of cake", "call it a day", "on the fence").forEach {
+                g.notes.create(idioms, basic, mapOf("Front" to it, "Back" to "…"), listOf("idiom"))
+            }
+            val c5 = g.concepts.create("Idioms")
+            val c6 = g.concepts.create("Vocab & idioms")
+            g.cards.allViews().forEach { v ->
+                if (v.deckName == "Idioms") g.concepts.link(v.card.id, c5)
+                if (v.deckName == "Idioms" || v.deckName == "A1") g.concepts.link(v.card.id, c6)
+            }
             g to clock
         }
 
@@ -199,7 +209,6 @@ class ScreenshotTest {
             render("today-$tag", w, h, g) { Shell(NavSection.Today) { TodayScreen({}, {}, {}, {}) } }
             render("decks-$tag", w, h, g) { Shell(NavSection.Decks) { DeckListScreen({}, {}, {}) } }
             render("browse-$tag", w, h, g) { Shell(NavSection.Browse) { BrowseScreen({}, {}) } }
-            render("graph-$tag", w, h, g) { Shell(NavSection.Graph) { GraphScreen({}) } }
             render("stats-$tag", w, h, g) { Shell(NavSection.Stats) { StatsScreen({}) } }
             render("settings-$tag", w, h, g) { Shell(null) { SettingsScreen() } }
             render("review-$tag", w, h, g) { ReviewScreen(null, onExit = {}, onEdit = {}) }

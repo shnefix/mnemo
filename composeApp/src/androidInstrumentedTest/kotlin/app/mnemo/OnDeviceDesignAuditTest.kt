@@ -127,20 +127,9 @@ class OnDeviceDesignAuditTest {
         }
         rule.waitUntil(15_000) { exists(hasContentDescription("Create cards")) }
         lint("01-today")
-        for ((i, tab) in listOf("Decks", "Graph", "Stats").withIndex()) {
+        for ((i, tab) in listOf("Decks", "Browse", "Stats").withIndex()) {
             tap(tab)
             lint("0${i + 2}-${tab.lowercase()}")
-        }
-        // Graph header actions and suggestions panel.
-        tap("Graph")
-        if (exists(hasText("Suggest concepts"))) {
-            tap("Suggest concepts")
-            lint("05-graph-suggest")
-        }
-        if (exists(hasText("New concept"))) {
-            tap("New concept")
-            lint("06-graph-new-concept-dialog")
-            if (exists(hasText("Cancel"))) tap("Cancel")
         }
         // Editor via the + button.
         rule.onNodeWithContentDescription("Create cards").performClick()

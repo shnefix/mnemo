@@ -10,6 +10,11 @@ data class RenderedCard(
     val answer: String,
     /** The text a typed answer is compared against (Type-the-answer and Cloze). */
     val expected: String?,
+    /**
+     * Text to read aloud instead of showing it: a `[listen: …]` marker in the question
+     * (dictation cards). The marker is removed from [question].
+     */
+    val listen: String? = null,
 )
 
 /**
@@ -27,7 +32,26 @@ object CardGenerator {
             else -> noteType.templates.indices.toList()
         }
 
+    private val listenMarker = Regex("""\[listen:\s*([^\]]+)]""")
+
     fun render(
+        noteType: NoteType,
+        fields: Map<String, String>,
+        templateIndex: Int,
+    ): RenderedCard {
+        val card = renderRaw(noteType, fields, templateIndex)
+        val m = listenMarker.find(card.question) ?: return card
+        return card.copy(
+            question =
+                card.question
+                    .replace(listenMarker, "")
+                    .trim()
+                    .ifEmpty { "Listen and type what you hear." },
+            listen = m.groupValues[1].trim(),
+        )
+    }
+
+    private fun renderRaw(
         noteType: NoteType,
         fields: Map<String, String>,
         templateIndex: Int,

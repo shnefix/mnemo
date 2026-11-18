@@ -1,9 +1,8 @@
 package app.mnemo.data.seed
 
-import app.mnemo.data.repo.NoteRepository
+import app.mnemo.data.seed.SeedInstaller.Card
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.graph.DeckGraph
-import app.mnemo.domain.model.DeckSettings
 import app.mnemo.domain.model.NoteKind
 import app.mnemo.domain.model.Relation
 import app.mnemo.platform.Prefs
@@ -101,37 +100,16 @@ object EnglishDeck {
         graph: AppGraph,
         fresh: Boolean = true,
     ): Int {
-        val create = mutableListOf<NoteRepository.NewNote>()
-        val update = mutableListOf<NoteRepository.NoteUpdate>()
+        val seed = SeedInstaller(graph, ROOT, fresh)
         // Opening the whole English deck gives a small daily mix; opening one pack gives all of it.
-        graph.decks.createByPath(ROOT, DeckSettings(newPerDay = 15, language = "en"))
+        seed.deck("", newPerDay = 15)
 
         suspend fun packs(
             s: Section,
             label: String,
             cards: List<Card>,
             kind: NoteKind,
-        ) {
-            graph.decks.createByPath("$ROOT::${s.name}", DeckSettings(newPerDay = s.newPerDay, language = "en"))
-            val type = graph.notes.noteTypeOf(kind)
-            val keyField = type.fields.first()
-            cards.chunked(PACK_SIZE).forEachIndexed { i, pack ->
-                val name = "$label ${(i + 1).toString().padStart(2, '0')}"
-                val deckId = graph.decks.createByPath("$ROOT::${s.name}::$name", DeckSettings(newPerDay = PACK_SIZE, language = "en"))
-                val existing = graph.notes.byDeck(deckId).associateBy { it.fields[keyField].orEmpty() }
-                pack.forEach { card ->
-                    val tags = listOf("english", s.tag) + card.tags
-                    val note = existing[card.fields[keyField].orEmpty()]
-                    when {
-                        note == null -> if (fresh) create += NoteRepository.NewNote(deckId, type, card.fields, tags)
-                        // Edited by the user since it was installed: theirs wins.
-                        note.updatedAt != note.createdAt -> {}
-                        note.fields != card.fields || note.tags != tags ->
-                            update += NoteRepository.NoteUpdate(note.id, deckId, card.fields, tags)
-                    }
-                }
-            }
-        }
+        ) = seed.packs(s.name, s.newPerDay, label, cards, kind, listOf("english", s.tag))
 
         packs(vocabulary, "Vocabulary", vocabularyCards(), NoteKind.Vocab)
         packs(idioms, "Idioms", idiomCards(), NoteKind.Basic)
@@ -149,20 +127,10 @@ object EnglishDeck {
             NoteKind.Basic,
         )
         packs(grammar, "Grammar", grammarCards(), NoteKind.Cloze)
-        // One transaction each: a second or so on a phone, and all-or-nothing.
-        val changed = graph.notes.createMany(create) + graph.notes.updateMany(update)
-        // Updates keep the note's time stamps equal, so later versions can still update it.
-        graph.notes.markUnedited(update.map { it.noteId })
-        return changed
+        return seed.commit()
     }
 
-    /** One card's fields and any extra tags (grammar topic). */
-    internal data class Card(
-        val fields: Map<String, String>,
-        val tags: List<String> = emptyList(),
-    )
-
-    private fun quote(examples: List<String>) = examples.joinToString("\n\n") { "> $it" }
+    internal fun quote(examples: List<String>) = examples.joinToString("\n\n") { "> $it" }
 
     internal fun vocabularyCards(): List<Card> {
         val more = extras(EnglishDeckExtras.VOCABULARY)

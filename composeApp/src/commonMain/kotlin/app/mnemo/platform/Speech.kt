@@ -11,4 +11,10 @@ expect object Speech {
         text: String,
         lang: String?,
     )
+
+    /** Start the engine early so the first Listen tap speaks without a delay. */
+    fun warmUp()
+
+    /** Stop whatever is being spoken (e.g. when the card changes). */
+    fun stop()
 }

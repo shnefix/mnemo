@@ -8,6 +8,18 @@
   examples (situations: three other ways to say it). The seed is versioned (`EnglishDeck.VERSION`,
   pref `seed.english`); a newer version updates installed cards in place, keeping their reviews,
   unless the user edited them.
+- **English B2 practice deck** (`data/seed/EnglishB2Deck.kt`, content in `EnglishB2Content.kt`):
+  a second built-in deck with its own daily mix (pref `seed.english.b2`): My mistakes (empty, first
+  in the mix), 84 collocations (gap + the usual wrong word), 135 phrasal verbs in 8 topic sub-decks
+  (about 150 with the B1–B2 deck, none repeated), 53 word families as word-formation clozes, 39
+  linking words (joined to the grammar topic "Linking words"), 51 key word transformations and 60
+  dictation sentences. Both English decks install through `SeedInstaller`.
+- **Dictation cards**: a `[listen: …]` marker in a card's front is read aloud when the card
+  appears (and with "Listen again") instead of being shown; such cards always get the type box.
+  Speech uses the card's own deck language, so it also works from "All decks".
+- **Concept mastery** (`WeakSpots.mastery`): the mean recall of the concept's *studied* cards;
+  never-reviewed cards count as coverage, not as 0%. The graph shows "new" for concepts not
+  started and a ring for the share studied; weak spots, Today and Stats only list started concepts.
 - **Graph for all decks** (`domain/graph/DeckGraph.kt`): each top-level deck and sub-deck is a
   concept (packs roll up), every card is linked to its decks' concepts, and the English grammar
   cards are grouped into 17 topics with "learn first" links. Synced at launch and on opening the

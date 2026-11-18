@@ -81,7 +81,6 @@ private fun NavSection.icon(): ImageVector =
         NavSection.Today -> MnemoIcons.Home
         NavSection.Decks -> MnemoIcons.Decks
         NavSection.Browse -> MnemoIcons.Browse
-        NavSection.Graph -> MnemoIcons.Graph
         NavSection.Stats -> MnemoIcons.Stats
     }
 
@@ -132,7 +131,7 @@ private fun PhoneTabBar(
     onCreate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tabs = listOf(NavSection.Today, NavSection.Decks, null, NavSection.Graph, NavSection.Stats)
+    val tabs = listOf(NavSection.Today, NavSection.Decks, null, NavSection.Browse, NavSection.Stats)
     Row(
         modifier =
             modifier

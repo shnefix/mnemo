@@ -7,10 +7,12 @@ import app.mnemo.di.AppGraph
 import app.mnemo.domain.model.Deck
 import app.mnemo.domain.model.DeckSettings
 import app.mnemo.domain.review.DailyQueue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class DeckRow(
     val deck: Deck,
@@ -41,7 +43,9 @@ class DecksViewModel(
         viewModelScope.launch { _state.value = DecksUiState(rows = rowsFor(graph.decks.all()), loading = false) }
     }
 
-    private suspend fun rowsFor(decks: List<Deck>): List<DeckRow> {
+    private suspend fun rowsFor(decks: List<Deck>): List<DeckRow> = withContext(Dispatchers.Default) { computeRows(decks) }
+
+    private suspend fun computeRows(decks: List<Deck>): List<DeckRow> {
         val now = graph.clock.now()
         // One pass over the cards for every row (loading them all per deck was O(decks × cards)).
         val cardsPerDeck =

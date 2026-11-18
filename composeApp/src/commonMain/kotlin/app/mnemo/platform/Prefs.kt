@@ -56,6 +56,7 @@ object Prefs {
     const val TEXT_SIZE = "text.size"
     const val ONBOARDED = "onboarded"
     const val ENGLISH_DECK = "seed.english"
+    const val ENGLISH_B2_DECK = "seed.english.b2"
     const val DECKS_EXPANDED = "decks.expanded"
     const val GRAPH_HIDDEN = "graph.hidden"
     const val FSRS_PARAMS = "fsrs.params"

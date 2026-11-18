@@ -79,53 +79,14 @@ private data class StatsData(
 fun StatsScreen(onEdit: (Long) -> Unit) {
     val graph = LocalAppGraph.current
     val compact = LocalWindowSize.current == WindowSize.Compact
-    var data by remember { mutableStateOf<StatsData?>(null) }
+    // Show the last numbers instantly when coming back to the tab, then refresh them.
+    var data by remember { mutableStateOf(lastStats) }
     var optimizing by remember { mutableStateOf(false) }
     var optimizeMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        val now = graph.clock.now()
-        val today = localDate(now)
-        val daily = graph.reviewLogs.dailyCounts(now - 200 * DAY_MS)
-        val byDate = reviewsByLocalDate(daily)
-        val heat = (181 downTo 0).map { back -> LocalDate.fromEpochDays(today.toEpochDays() - back).let { it to (byDate[it] ?: 0) } }
-        val ret = graph.reviewLogs.retentionSince(now - 30 * DAY_MS)
-        val decks = graph.decks.all()
-        val types = graph.notes.noteTypes().associateBy { it.id }
-        val views = graph.cards.allViews()
-
-        fun title(cardId: Long): String =
-            views.firstOrNull { it.card.id == cardId }?.let { v ->
-                types[v.noteTypeId]?.let { t ->
-                    CardGenerator
-                        .render(t, v.fields, v.card.templateIndex)
-                        .question
-                        .lineSequence()
-                        .first()
-                }
-            } ?: "card $cardId"
-        val leeches = graph.cards.leeches(8).map { title(it.id) to it.lapses }
-        val hardest =
-            views.filter { it.card.difficulty != null }.sortedByDescending { it.card.difficulty }.take(5).map {
-                title(it.card.id) to
-                    (it.card.difficulty ?: 0.0)
-            }
-        data =
-            StatsData(
-                heat = heat,
-                streak = streak(byDate.keys, today),
-                longest = longestStreak(byDate.keys),
-                retention = ret.ratio,
-                retentionN = ret.total,
-                forecast = graph.cards.forecast(decks.map { it.id }, now, 30),
-                minutes30 = (graph.reviewLogs.timeSpentSince(now - 30 * DAY_MS) / 60_000L).toInt(),
-                reviews30 = daily.filter { it.dayIndex * DAY_MS >= now - 30 * DAY_MS }.sumOf { it.count },
-                leeches = leeches,
-                hardest = hardest,
-                totalReviews = graph.reviewLogs.countAll().toInt(),
-                concepts = WeakSpots.scores(graph, now).sortedBy { it.mastery },
-            )
+        data = withContext(Dispatchers.Default) { loadStats(graph) }.also { lastStats = it }
     }
 
     Column(
@@ -267,7 +228,7 @@ fun StatsScreen(onEdit: (Long) -> Unit) {
                 Panel {
                     Text("Mastery by concept", style = MaterialTheme.typography.headlineSmall, color = MnemoColors.text)
                     Text(
-                        "mean recall probability of each concept's cards · weakest first",
+                        "mean recall probability of the cards you have studied · weakest first",
                         style = MaterialTheme.typography.bodySmall,
                         color = MnemoColors.text2,
                     )
@@ -281,7 +242,11 @@ fun StatsScreen(onEdit: (Long) -> Unit) {
                                 modifier = Modifier.weight(1f),
                                 maxLines = 1,
                             )
-                            Text("${c.cardIds.size} cards", style = MaterialTheme.typography.bodySmall, color = MnemoColors.text2)
+                            Text(
+                                "${c.studied} of ${c.cardIds.size} cards studied",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MnemoColors.text2,
+                            )
                         }
                         Spacer(Modifier.height(4.dp))
                         MasteryBar(c.mastery)
@@ -372,4 +337,52 @@ private fun Heatmap(days: List<Pair<LocalDate, Int>>) {
             }
         }
     }
+}
+
+/** Kept across tab switches so Stats opens with numbers instead of a blank screen. */
+private var lastStats: StatsData? = null
+
+private suspend fun loadStats(graph: app.mnemo.di.AppGraph): StatsData {
+    val now = graph.clock.now()
+    val today = localDate(now)
+    val daily = graph.reviewLogs.dailyCounts(now - 200 * DAY_MS)
+    val byDate = reviewsByLocalDate(daily)
+    val heat = (181 downTo 0).map { back -> LocalDate.fromEpochDays(today.toEpochDays() - back).let { it to (byDate[it] ?: 0) } }
+    val ret = graph.reviewLogs.retentionSince(now - 30 * DAY_MS)
+    val decks = graph.decks.all()
+    val types = graph.notes.noteTypes().associateBy { it.id }
+    val views = graph.cards.allViews()
+    val viewById = views.associateBy { it.card.id }
+
+    fun title(cardId: Long): String =
+        viewById[cardId]?.let { v ->
+            types[v.noteTypeId]?.let { t ->
+                CardGenerator
+                    .render(t, v.fields, v.card.templateIndex)
+                    .question
+                    .lineSequence()
+                    .first()
+            }
+        } ?: "card $cardId"
+    val leeches = graph.cards.leeches(8).map { title(it.id) to it.lapses }
+    val hardest =
+        views.filter { it.card.difficulty != null }.sortedByDescending { it.card.difficulty }.take(5).map {
+            title(it.card.id) to
+                (it.card.difficulty ?: 0.0)
+        }
+    return StatsData(
+        heat = heat,
+        streak = streak(byDate.keys, today),
+        longest = longestStreak(byDate.keys),
+        retention = ret.ratio,
+        retentionN = ret.total,
+        forecast = graph.cards.forecast(decks.map { it.id }, now, 30),
+        minutes30 = (graph.reviewLogs.timeSpentSince(now - 30 * DAY_MS) / 60_000L).toInt(),
+        reviews30 = daily.filter { it.dayIndex * DAY_MS >= now - 30 * DAY_MS }.sumOf { it.count },
+        leeches = leeches,
+        hardest = hardest,
+        totalReviews = graph.reviewLogs.countAll().toInt(),
+        // Started concepts weakest first; concepts not studied yet are not "0%".
+        concepts = WeakSpots.scores(graph, now).filter { it.started }.sortedBy { it.mastery },
+    )
 }

@@ -19,6 +19,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.mnemo.data.io.AutoBackup
+import app.mnemo.data.seed.EnglishB2Deck
 import app.mnemo.data.seed.EnglishDeck
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.graph.DeckGraph
@@ -27,7 +28,6 @@ import app.mnemo.ui.browse.BrowseScreen
 import app.mnemo.ui.decks.DeckListScreen
 import app.mnemo.ui.decks.DeckSettingsScreen
 import app.mnemo.ui.editor.NoteEditorScreen
-import app.mnemo.ui.graph.GraphScreen
 import app.mnemo.ui.nav.AdaptiveScaffold
 import app.mnemo.ui.nav.NavSection
 import app.mnemo.ui.nav.Route
@@ -60,6 +60,10 @@ fun App(
                 }
                 checked = true
                 // Daily safety net; never blocks the UI and never fails the launch.
+                runCatching {
+                    app.mnemo.platform.Speech
+                        .warmUp()
+                }
                 runCatching { AutoBackup.runIfDue(graph) }
                 runCatching { graph.notes.pruneTombstones() }
             }
@@ -67,6 +71,7 @@ fun App(
             LaunchedEffect(onboarded) {
                 if (onboarded) {
                     runCatching { EnglishDeck.installOnce(graph) }
+                    runCatching { EnglishB2Deck.installOnce(graph) }
                     // Every deck on the knowledge graph, plus the English grammar topics.
                     runCatching { DeckGraph.sync(graph) }
                     runCatching { EnglishDeck.syncGraph(graph) }
@@ -143,12 +148,6 @@ fun App(
                             BrowseScreen(
                                 onEdit = { nav.navigate(Route.Editor(noteId = it)) },
                                 onAdd = { nav.navigate(Route.Editor()) },
-                            )
-                        }
-                        composable<Route.Graph> {
-                            GraphScreen(
-                                onEditCard = { nav.navigate(Route.Editor(noteId = it)) },
-                                onWeakSpots = { nav.navigate(Route.Review(weak = true)) },
                             )
                         }
                         composable<Route.Stats> { StatsScreen(onEdit = { nav.navigate(Route.Editor(noteId = it)) }) }

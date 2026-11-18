@@ -259,22 +259,22 @@ class OnDeviceImportExportTest {
             )
             assertEquals(2, g.concepts.conceptsFor(cards[0]).size + g.concepts.conceptsFor(cards[2]).size)
 
-            // Review the "Strong" cards Easy; leave the "Weak" ones new, then jump ahead a month.
+            // Review the "Strong" cards Easy and the "Weak" ones Again, then jump ahead a month.
             val session = ReviewSession(g, deckId)
             session.load()
             val strongIds = setOf(cards[0], cards[1])
-            var answered = 0
+            val answered = HashSet<Long>()
             var guard = 0
-            while (answered < strongIds.size && guard++ < 20) {
+            while (answered.size < cards.size && guard++ < 20) {
                 val v = session.current() ?: break
-                if (v.card.id in strongIds) {
-                    assertNotNull(session.answer(Rating.Easy, 500))
-                    answered += 1
-                } else {
+                if (v.card.id in answered) {
                     session.skipCurrent()
+                    continue
                 }
+                assertNotNull(session.answer(if (v.card.id in strongIds) Rating.Easy else Rating.Again, 500))
+                answered += v.card.id
             }
-            assertEquals(2, answered)
+            assertEquals(4, answered.size)
             clock.time += 30 * DAY_MS
 
             val scores = WeakSpots.scores(g, clock.now()).associateBy { it.name }
