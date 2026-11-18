@@ -29,8 +29,15 @@ The Android target is wired but only builds when an Android SDK is present
 (`ANDROID_HOME` or `local.properties` with `sdk.dir=`). Then:
 
 ```bash
-make android    # ./gradlew :composeApp:assembleDebug
+make android      # ./gradlew :composeApp:assembleDebug
+make phone        # fast R8 release build onto the connected phone (app.mnemo)
+make phone-test   # on-device tests (./gradlew :composeApp:connectedDebugAndroidTest)
 ```
+
+The debug build installs as its own app, `app.mnemo.debug` ("Mnemo (test)"), next to the
+real `app.mnemo` rather than over it. It has its own database and prefs, no Google sync and
+no self-update, so the on-device tests can never read, change or delete the decks in the
+real app. Gradle uninstalls it after `make phone-test`.
 
 ## Using it
 

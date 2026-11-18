@@ -16,7 +16,13 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 actual object Updater {
-    actual val supported: Boolean = true
+    /**
+     * Only the real app (`app.mnemo`) updates itself. The on-device test build (`app.mnemo.debug`)
+     * must not offer the release APK, which would install over the user's real copy.
+     */
+    actual val supported: Boolean get() = appContext.packageName == RELEASE_PACKAGE
+
+    private const val RELEASE_PACKAGE = "app.mnemo"
 
     private fun info() = appContext.packageManager.getPackageInfo(appContext.packageName, 0)
 

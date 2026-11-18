@@ -152,26 +152,7 @@ if (androidSdkPresent) {
             versionCode = gitCommitCount
             versionName = "0.1.$gitCommitCount"
             testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-            // Firebase settings from google-services.json (gitignored), read here instead of via
-            // the google-services plugin. Without the file the app builds with sync turned off.
-            file("google-services.json").takeIf { it.exists() }?.let { f ->
-                @Suppress("UNCHECKED_CAST")
-                val root = groovy.json.JsonSlurper().parse(f) as Map<String, Any?>
-                val info = root["project_info"] as Map<String, Any?>
-                val client = (root["client"] as List<Map<String, Any?>>).first()
-                val appId = (client["client_info"] as Map<String, Any?>)["mobilesdk_app_id"] as String
-                val apiKey = ((client["api_key"] as List<Map<String, Any?>>).first())["current_key"] as String
-                val webClient =
-                    (client["oauth_client"] as? List<Map<String, Any?>>).orEmpty().firstOrNull { it["client_type"] == 3 }?.get(
-                        "client_id",
-                    ) as String?
-                resValue("string", "google_app_id", appId)
-                resValue("string", "google_api_key", apiKey)
-                resValue("string", "project_id", info["project_id"] as String)
-                resValue("string", "gcm_defaultSenderId", info["project_number"] as String)
-                (info["storage_bucket"] as String?)?.let { resValue("string", "google_storage_bucket", it) }
-                webClient?.let { resValue("string", "default_web_client_id", it) }
-            }
+            manifestPlaceholders["appLabel"] = "Mnemo"
         }
         buildFeatures { resValues = true }
         packaging {
@@ -196,7 +177,36 @@ if (androidSdkPresent) {
             }
         }
         buildTypes {
+            // The debug build is what the on-device tests install (`make phone-test`). Its own
+            // application id puts it next to the real app instead of over it, so it gets its own
+            // database and prefs and the tests can never touch the user's decks.
+            getByName("debug") {
+                applicationIdSuffix = ".debug"
+                manifestPlaceholders["appLabel"] = "Mnemo (test)"
+            }
             getByName("release") {
+                // Firebase settings from google-services.json (gitignored), read here instead of via
+                // the google-services plugin. Without the file the app builds with sync turned off.
+                // Release only: the debug build is the on-device test install, which must never
+                // sign in to the real account and push its test decks over the synced collection.
+                file("google-services.json").takeIf { it.exists() }?.let { f ->
+                    @Suppress("UNCHECKED_CAST")
+                    val root = groovy.json.JsonSlurper().parse(f) as Map<String, Any?>
+                    val info = root["project_info"] as Map<String, Any?>
+                    val client = (root["client"] as List<Map<String, Any?>>).first()
+                    val appId = (client["client_info"] as Map<String, Any?>)["mobilesdk_app_id"] as String
+                    val apiKey = ((client["api_key"] as List<Map<String, Any?>>).first())["current_key"] as String
+                    val webClient =
+                        (client["oauth_client"] as? List<Map<String, Any?>>).orEmpty().firstOrNull { it["client_type"] == 3 }?.get(
+                            "client_id",
+                        ) as String?
+                    resValue("string", "google_app_id", appId)
+                    resValue("string", "google_api_key", apiKey)
+                    resValue("string", "project_id", info["project_id"] as String)
+                    resValue("string", "gcm_defaultSenderId", info["project_number"] as String)
+                    (info["storage_bucket"] as String?)?.let { resValue("string", "google_storage_bucket", it) }
+                    webClient?.let { resValue("string", "default_web_client_id", it) }
+                }
                 // R8 + resource shrinking: a debug build of Compose runs several times slower.
                 isMinifyEnabled = true
                 isShrinkResources = true

@@ -35,11 +35,11 @@ phone:
 	  *) exit 1 ;; \
 	esac
 
-## Run the on-device tests on the phone without uninstalling the app (and its data) afterwards.
-## They install the slow debug build; run `make phone` after to put the fast build back.
+## Run the on-device tests on the phone. They install the debug build, which is its own app
+## (`app.mnemo.debug`, "Mnemo (test)") with its own database next to the real `app.mnemo`, so
+## they never see the real decks. Gradle uninstalls the test build (and its data) afterwards.
 phone-test:
-	./gradlew :composeApp:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
-	-adb uninstall app.mnemo.test
+	./gradlew :composeApp:connectedDebugAndroidTest
 
 clean:
 	./gradlew clean

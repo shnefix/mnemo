@@ -1,6 +1,7 @@
 package app.mnemo
 
 import android.graphics.Bitmap
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -63,6 +64,8 @@ class OnDeviceDesignAuditTest {
         val bmp = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
         File(shotDir, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
+
+    private fun hasRole(role: Role) = SemanticsMatcher.expectValue(SemanticsProperties.Role, role)
 
     private fun isLetter(c: Char) = c.isLetterOrDigit()
 
@@ -137,10 +140,11 @@ class OnDeviceDesignAuditTest {
         lint("07-editor")
         rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         settle()
-        // Browse and Settings are reached from the Decks header on phones.
-        tap("Decks")
+        // Browse and Settings are reached from the Decks header on phones (not the Browse tab).
         for ((i, name) in listOf("Browse", "Settings").withIndex()) {
-            tap(name)
+            tap("Decks")
+            rule.onAllNodes(hasText(name) and !hasRole(Role.Tab)).onFirst().performClick()
+            settle()
             lint("0${8 + i}-${name.lowercase()}")
             rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             settle()
@@ -215,7 +219,7 @@ class OnDeviceDesignAuditTest {
 
     /**
      * Deletes every deck called [name] (this run's and any left by an earlier failed run) through
-     * the menu on that deck's own row. Never the first row's menu: that is one of the user's decks.
+     * the menu on that deck's own row. Never the first row's menu: that is another deck (the built-in English one).
      */
     private fun deleteDeck(name: String) {
         rule.waitUntil(15_000) { exists(hasContentDescription("Create cards")) }

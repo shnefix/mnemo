@@ -6,12 +6,14 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -26,9 +28,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Drives the installed app end to end on the phone: launch, (skip onboarding
- * on a fresh install), create a deck from the editor, add a card, review it,
- * then delete the deck again so the user's data is left as it was.
+ * Drives the app end to end on the phone: launch, (skip onboarding on a fresh
+ * install), create a deck from the editor, add a card, review it, then delete
+ * the deck again. Runs in the test install (`app.mnemo.debug`), which has its
+ * own database, never in the user's real `app.mnemo`.
  */
 @RunWith(AndroidJUnit4::class)
 class OnDeviceUiTest {
@@ -39,7 +42,7 @@ class OnDeviceUiTest {
 
     private fun hasRole(role: Role) = SemanticsMatcher.expectValue(SemanticsProperties.Role, role)
 
-    /** The deck list is lazy: with real decks on the phone a test deck may sit below the fold, and rows load async. */
+    /** The deck list is lazy: a test deck may sit below the fold (the English deck tree is above it), and rows load async. */
     private fun scrollDecksTo(name: String) {
         rule.waitUntil(15_000) {
             runCatching { rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name)) }.isSuccess
@@ -106,33 +109,30 @@ class OnDeviceUiTest {
         rule.onNodeWithContentDescription("End session").performClick()
 
         // 5. Clean up: delete this run's deck (and any left behind by earlier failed runs) through the row menu.
+        // Ending the session may land on Today, which also shows the deck as a tile: go to Decks first.
+        waitFor(hasText("Decks") and hasRole(Role.Tab))
+        rule.onNode(hasText("Decks") and hasRole(Role.Tab)).performClick()
         scrollDecksTo(deckName)
-        waitFor(hasContentDescription("Deck menu"))
+        // Only a menu inside a "UiTest" deck row, and only a dialog that names a "UiTest" deck: the
+        // deck name also shows elsewhere for a moment (the "deleted" snackbar), never act on that.
+        val testDeckMenu = hasContentDescription("Deck menu") and hasAnyAncestor(hasText("UiTest ", substring = true))
+        waitFor(testDeckMenu)
         var rounds = 0
-        while (rounds++ < 5) {
-            val target =
-                rule
-                    .onAllNodes(hasText("UiTest ", substring = true) and !hasRole(Role.Tab))
-                    .fetchSemanticsNodes()
-                    .firstOrNull() ?: break
-            val menus = rule.onAllNodes(hasContentDescription("Deck menu"))
-            val idx =
-                menus.fetchSemanticsNodes().indexOfFirst {
-                    it.boundsInRoot.top <= target.boundsInRoot.bottom &&
-                        it.boundsInRoot.bottom >= target.boundsInRoot.top
-                }
-            check(idx >= 0) { "No menu button on the row of ${target.config}" }
-            menus[idx].performClick()
+        while (rounds++ < 5 && exists(testDeckMenu)) {
+            val before = rule.onAllNodes(testDeckMenu).fetchSemanticsNodes().size
+            rule.onAllNodes(testDeckMenu).onFirst().performClick()
             waitFor(hasText("Delete"))
             rule.onNodeWithText("Delete").performClick()
-            waitFor(hasText("Delete “", substring = true) and hasAnyAncestor(isDialog()))
+            waitFor(hasText("Delete “UiTest ", substring = true) and hasAnyAncestor(isDialog()))
             rule.onNode(hasText("Delete") and hasAnyAncestor(isDialog())).performClick()
             rule.waitUntil(15_000) { !exists(isDialog()) }
+            // The deleted row animates out: wait until it is gone before looking for the next one.
+            rule.waitUntil(15_000) { rule.onAllNodes(testDeckMenu).fetchSemanticsNodes().size < before }
         }
-        rule.waitUntil(15_000) { !exists(hasText(deckName)) }
+        rule.waitUntil(15_000) { !exists(hasText(deckName) and hasAnyDescendant(hasContentDescription("Deck menu"))) }
     }
 
-    /** The built-in English deck is added on launch and shows in the deck list (unless the user deleted it). */
+    /** The built-in English deck is added on launch and shows in the deck list. */
     @Test
     fun builtInEnglishDeckAppearsInDeckList() {
         rule.waitUntil(20_000) {
