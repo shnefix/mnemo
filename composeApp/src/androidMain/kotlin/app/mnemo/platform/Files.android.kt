@@ -130,6 +130,9 @@ actual suspend fun saveSharedBackup(
     keep: Int,
 ): String? =
     withContext(Dispatchers.IO) {
+        // Only the real app: the on-device test build (app.mnemo.debug) starts empty on every run
+        // and would fill Download/Mnemo with test backups.
+        if (appContext.packageName != "app.mnemo") return@withContext null
         runCatching {
             val where = writeToDownloads(name, content, replace = true) ?: return@runCatching null
             // Only this app's own files are visible here, so older copies of other apps stay put.
