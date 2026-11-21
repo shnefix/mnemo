@@ -3,6 +3,7 @@ package app.mnemo.data.seed
 import app.mnemo.data.repo.NoteRepository
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.model.DeckSettings
+import app.mnemo.domain.model.Note
 import app.mnemo.domain.model.NoteKind
 import app.mnemo.domain.model.ReviewMode
 
@@ -19,6 +20,27 @@ internal class SeedInstaller(
 ) {
     private val create = mutableListOf<NoteRepository.NewNote>()
     private val update = mutableListOf<NoteRepository.NoteUpdate>()
+
+    /** Updated notes that still count as "never edited by the user". */
+    private val unedited = mutableListOf<Long>()
+
+    /** Notes of an older layout that [fill] may move into their new deck, by first field. */
+    private var adopted = emptyMap<String, Note>()
+
+    /** First fields of cards that are created even when this is only an update ([fresh] is false). */
+    private var always = emptySet<String>()
+
+    fun alwaysCreate(cards: List<Card>) {
+        always = cards.mapNotNull { it.fields.values.firstOrNull() }.toSet()
+    }
+
+    /** Lets [fill] find (and move) these notes from an older layout instead of adding copies. */
+    fun adopt(
+        notes: List<Note>,
+        keyField: String,
+    ) {
+        adopted = notes.associateBy { it.fields[keyField].orEmpty() }
+    }
 
     /** One card's fields and its tags. */
     data class Card(
@@ -47,13 +69,17 @@ internal class SeedInstaller(
         val existing = graph.notes.byDeck(deckId).associateBy { it.fields[keyField].orEmpty() }
         cards.forEach { card ->
             val all = (tags + card.tags).distinct()
-            val note = existing[card.fields[keyField].orEmpty()]
+            val key = card.fields[keyField].orEmpty()
+            val note = existing[key] ?: adopted[key]
             when {
-                note == null -> if (fresh) create += NoteRepository.NewNote(deckId, type, card.fields, all)
-                // Edited by the user since it was installed: theirs wins.
-                note.updatedAt != note.createdAt -> {}
-                note.fields != card.fields || note.tags != all ->
+                note == null -> if (fresh || key in always) create += NoteRepository.NewNote(deckId, type, card.fields, all)
+                // Edited by the user since it was installed: theirs wins (it only moves, if it must).
+                note.updatedAt != note.createdAt ->
+                    if (note.deckId != deckId) update += NoteRepository.NoteUpdate(note.id, deckId, note.fields, note.tags)
+                note.fields != card.fields || note.tags != all || note.deckId != deckId -> {
                     update += NoteRepository.NoteUpdate(note.id, deckId, card.fields, all)
+                    unedited += note.id
+                }
             }
         }
     }
@@ -84,7 +110,7 @@ internal class SeedInstaller(
         // One transaction each: a second or so on a phone, and all-or-nothing.
         val changed = graph.notes.createMany(create) + graph.notes.updateMany(update)
         // Updates keep the note's time stamps equal, so later versions can still update it.
-        graph.notes.markUnedited(update.map { it.noteId })
+        graph.notes.markUnedited(unedited)
         return changed
     }
 }

@@ -34,6 +34,13 @@
   (about 150 with the B1–B2 deck, none repeated), 53 word families as word-formation clozes, 39
   linking words (joined to the grammar topic "Linking words"), 51 key word transformations and 60
   dictation sentences. Both English decks install through `SeedInstaller`.
+- **Things to know** (English deck v3): the picture section is "4. Things to know" — the useful
+  things and actions only (the rarely needed ones were removed, new everyday ones added). An update
+  renames the old section, moves cards to their packs and deletes seed cards that were dropped
+  (edited ones are kept). `SeedInstaller.adopt` / `alwaysCreate` make that possible.
+- **German (A0) deck** (`data/seed/GermanA0Deck.kt`, content in `GermanA0Content.kt`, pref
+  `seed.german.a0`): section "1. Name it" — pictures to name in German with der/die/das and the
+  plural, verbs with the ich-form, colours and the numbers 1–10; every card has a simple example.
 - **Dictation cards**: a `[listen: …]` marker in a card's front is read aloud when the card
   appears (and with "Listen again") instead of being shown; such cards always get the type box.
   Speech uses the card's own deck language, so it also works from "All decks".

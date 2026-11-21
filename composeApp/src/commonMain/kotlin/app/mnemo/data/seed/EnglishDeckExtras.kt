@@ -287,41 +287,24 @@ a ladder|He climbed the ladder to clean the windows.|Hold the ladder while I cha
 a screwdriver|Pass me the screwdriver, please.|I need a small screwdriver to open the battery cover.
 a spanner (US: a wrench)|He tightened the bolt with a spanner.|Have you seen my wrench? I need to fix the bike.
 a saw|He cut the wood with a saw.|Be careful — that saw is very sharp.
-an axe|He chopped firewood with an axe.|The firefighters broke down the door with an axe.
-a pickaxe|The workers broke the rocks with a pickaxe.|You need a pickaxe to dig in this hard ground.
 a nut and bolt|One nut and bolt is missing from the shelf.|Tighten the nut onto the bolt.
-a clamp (vice)|Hold the wood in a clamp while you cut it.|He fixed the pipe in a vice.
 a magnet|There's a magnet on the fridge holding the photo.|Magnets pick up iron and steel.
 a hook|Hang your coat on the hook.|The fish was caught on a hook.
 a safety pin|My button fell off, so I used a safety pin.|She keeps safety pins in her bag for emergencies.
 a sewing needle|It's hard to thread a sewing needle.|She sewed the button back on with a needle and thread.
-a spool of thread|I need a spool of black thread.|The cat played with a spool of thread.
-a ball of yarn (wool)|My grandmother knits with a ball of wool.|She bought red yarn to make a scarf.
 a knot|Tie a knot in the rope.|My hair is full of knots.
 a chain|Lock your bike with a chain.|She wore a gold chain around her neck.
-a lifebuoy (life ring)|They threw a lifebuoy to the swimmer.|There's a life ring next to the pool.
-an anchor|The ship dropped anchor in the bay.|They pulled up the anchor and sailed away.
 a compass|We used a compass to find north.|Always take a map and a compass when you go hiking.
-an hourglass|When the sand in the hourglass runs out, your time is up.|The game comes with a small hourglass.
 scales (a balance)|Put the flour on the scales.|I weigh myself on the bathroom scales every morning.
-an abacus|Children learn to count with an abacus.|People used an abacus long before calculators.
 a paperclip|Hold the pages together with a paperclip.|Can I borrow a paperclip?
 a drawing pin (US: a thumbtack)|She stuck the poster on the wall with drawing pins.|Ouch! I stepped on a thumbtack.
-a set square (triangular ruler)|Use a set square to draw a right angle.|Don't forget your ruler and set square for the maths exam.
-a fountain pen|He signed the letter with a fountain pen.|My fountain pen has run out of ink.
 a crayon|The kids drew pictures with crayons.|She coloured the sun with a yellow crayon.
-a card file box|The recipes are kept in a card file box.|The old library used a card file box for its catalogue.
 a filing cabinet|The contracts are in the filing cabinet.|Lock the filing cabinet before you leave.
 a receipt|Keep the receipt in case you need to return it.|Can I have a receipt, please?
 an ID card|You need to show your ID card at the entrance.|I lost my ID card and had to get a new one.
 a plug|Pull the plug out before you clean the kettle.|British plugs have three pins.
 a low battery|My phone has a low battery — can I charge it?|The low-battery warning came on.
 a candle|We lit candles when the power went off.|She blew out the candles on her cake.
-an oil lamp|Before electricity, people read by oil lamps.|The oil lamp gave a warm light.
-a paper lantern|The garden was decorated with paper lanterns.|They hung red paper lanterns for the New Year.
-a firecracker|Firecrackers went off all night.|Keep your dog inside when people set off firecrackers.
-a piñata|The children hit the piñata until the sweets fell out.|We had a piñata at her birthday party.
-a wind chime|The wind chime rang gently in the breeze.|She hung a wind chime by the front door.
 a folding fan|She cooled herself with a folding fan.|He bought a painted folding fan as a souvenir.
 a mousetrap|We set a mousetrap in the kitchen.|The mousetrap caught nothing.
 a broom|Sweep the floor with the broom.|The broom is in the cupboard.
@@ -345,102 +328,119 @@ a fork and knife (cutlery)|Could we have some more cutlery, please?|Hold the for
 a kitchen knife|Be careful — that kitchen knife is sharp.|Cut the onions with a kitchen knife.
 chopsticks|Can you eat with chopsticks?|The restaurant gave us chopsticks and spoons.
 a frying pan|Heat some oil in a frying pan.|She cooked the eggs in a frying pan.
-a fondue pot|We dipped bread in the cheese in the fondue pot.|They gave us a fondue pot as a wedding present.
 a salt shaker|Could you pass the salt shaker?|The salt shaker is empty.
-a waffle|We had waffles with fruit for breakfast.|This café makes the best waffles.
-a pretzel|He bought a warm pretzel at the market.|Pretzels are popular in Germany.
-a dumpling|We made dumplings for the New Year.|The soup comes with two dumplings.
-a flatbread|We ate the curry with flatbread.|Flatbread is easy to make at home.
 a croissant|I had a croissant and a coffee for breakfast.|The bakery sells fresh croissants.
 a hedgehog|A hedgehog came into our garden at night.|Hedgehogs roll into a ball when they're scared.
-a beaver|Beavers build dams across rivers.|We saw a beaver swimming in the lake.
-an otter|Otters hold hands while they sleep.|An otter was playing in the river.
-a sloth|Sloths move very slowly.|The sloth hung from the tree all day.
-a badger|Badgers come out at night.|We saw a badger by the side of the road.
 a squirrel|A squirrel ran up the tree.|Squirrels hide nuts for the winter.
-a flamingo|Flamingos stand on one leg.|The lake was pink with flamingos.
-a peacock|The peacock opened its beautiful tail.|Peacocks walked around the palace garden.
 a feather|A white feather floated down.|The pillow is filled with feathers.
-a seal|Seals were lying on the rocks.|We watched the seals from the boat.
-a llama|We went hiking with a llama in Peru.|Llamas sometimes spit when they're angry.
 a kangaroo|Kangaroos carry their babies in a pouch.|We saw kangaroos in Australia.
-coral|The coral reef was full of colourful fish.|Warm seas are damaging the coral.
 a mushroom|Don't eat wild mushrooms unless you know they're safe.|I'd like a mushroom pizza, please.
 a cactus|A cactus doesn't need much water.|Be careful — the cactus is prickly.
 a rock (boulder)|We sat on a big rock by the lake.|A boulder blocked the road after the storm.
 a volcano|The volcano erupted last year.|They climbed to the top of the volcano.
 a sledge (US: sled)|The kids pulled the sledge up the hill.|We went sledging in the snow.
-a roller skate|She can go fast on roller skates.|One of my roller skates has a broken wheel.
 a kite|We flew a kite on the beach.|The kite got stuck in a tree.
-a yo-yo|He can do tricks with a yo-yo.|My yo-yo string broke.
-an accordion|An old man was playing the accordion in the square.|The accordion is heavy to carry.
-a banjo|He plays country music on the banjo.|The banjo has five strings.
 a violin|She has played the violin since she was six.|The violin solo was beautiful.
 a trumpet|He plays the trumpet in a jazz band.|The trumpet was too loud.
 a telescope|We looked at the moon through a telescope.|Astronomers use huge telescopes.
 a microscope|We looked at the cells under a microscope.|The scientist adjusted the microscope.
-an alembic (still)|An alembic was used to make perfume and spirits.|The museum has an old copper alembic.
-a test tube|She poured the liquid into a test tube.|The test tube broke in the lab.
-a petri dish|Bacteria grew in the petri dish.|The scientist labelled each petri dish.
 a stethoscope|The doctor listened to my chest with a stethoscope.|She wears a stethoscope around her neck.
 a plaster (US: a Band-Aid)|Put a plaster on that cut.|Do you have a Band-Aid?
 a crutch|He walked on crutches after the accident.|She'll need crutches for six weeks.
-a white cane|Blind people use a white cane to find their way.|He tapped his white cane on the pavement.
 a wheelchair|The building has wheelchair access.|She has used a wheelchair since the accident.
-an urn|His ashes were placed in an urn.|The museum has a Greek urn from 500 BC.
-a headstone (gravestone)|Flowers were left by the headstone.|His name is written on the gravestone.
 a hiking boot|Wear hiking boots on the mountain path.|My hiking boots are covered in mud.
 a flip-flop|I wear flip-flops on the beach.|I lost a flip-flop in the sea.
-ballet shoes|The dancer tied her ballet shoes.|She got her first ballet shoes when she was five.
 a backpack (rucksack)|He packed his backpack for the trip.|Put your rucksack under the seat.
-a pouch|She keeps her coins in a small pouch.|The kangaroo's baby lives in a pouch.
-a military helmet|Soldiers wear military helmets.|The museum has a helmet from the First World War.
-a mortarboard (graduation cap)|The students threw their mortarboards in the air.|She wore a mortarboard at her graduation.
 a high-visibility vest|Workers on the road wear high-visibility vests.|Keep a high-visibility vest in your car.
 goggles|Wear goggles when you swim in the pool.|You need safety goggles in the lab.
 gloves|It's cold — put your gloves on.|The doctor wore rubber gloves.
 a scarf|She wrapped a scarf around her neck.|I knitted a scarf for my brother.
-a service bell (reception bell)|Ring the bell at reception for service.|He rang the service bell twice.
-an old key|We found an old key in the drawer.|The old key opened a secret box.
 a brick|The house is built of red bricks.|He laid the bricks for the garden wall.
-an oil drum (barrel)|The oil drums were stored outside.|They used an old barrel to collect rainwater.
+a light bulb|The light bulb in the kitchen has blown.|I need to buy a new light bulb.
+a tap (US: a faucet)|Turn the tap off while you brush your teeth.|The tap was dripping all night.
+an ice cube|Would you like an ice cube in your drink?|The ice cubes melted in the sun.
+a shopping trolley (US: a shopping cart)|I put the milk in the trolley.|You need a coin to unlock the trolley.
+a purse|I left my purse on the bus.|She took some coins out of her purse.
+a credit card|Can I pay by credit card?|My credit card has expired.
+a banknote (US: a bill)|I only have a twenty-pound note.|The machine doesn't accept old banknotes.
+a coin|I found a coin on the pavement.|Have you got a one-euro coin for the locker?
+a suitcase|My suitcase was too heavy.|I haven't packed my suitcase yet.
+a padlock|Lock your bike with a padlock.|I forgot the code for my padlock.
+a key|I can't find my keys.|Don't forget to lock the door and take your key.
+a calendar|Write the date in your calendar.|There's a calendar on the kitchen wall.
+an envelope|Put the letter in an envelope.|I forgot to write the address on the envelope.
+a parcel (US: a package)|A parcel arrived for you this morning.|I need to post this parcel today.
+a ruler|Draw a line with a ruler.|My ruler is thirty centimetres long.
+a notebook|I write new words in a notebook.|Bring a notebook to the lesson.
+a bin (US: a trash can)|Put the rubbish in the bin.|The bin is full again.
+a hammer|Pass me the hammer and some nails.|He hit his thumb with the hammer.
+a torch (US: a flashlight)|Take a torch in case the power goes out.|The batteries in my torch are dead.
+headphones|I always wear headphones on the train.|Can you turn your headphones down? I can hear them.
+a laptop|I work on my laptop at the café.|My laptop battery is almost dead.
+a keyboard|The keyboard on my laptop is sticky.|Press Enter on the keyboard.
+a computer mouse|My mouse stopped working.|Click the icon with the mouse.
+a printer|The printer is out of paper.|Can you send it to the printer?
+a television (TV)|We watched TV all evening.|Turn the television off, please.
+a radio|I listen to the radio in the car.|She turned the radio on.
+a battery|The battery in the remote is flat.|I need to charge the battery.
+an alarm clock|I set my alarm clock for six.|The alarm clock didn't go off this morning.
+a watch|My watch is five minutes fast.|He looked at his watch and left.
+a pill (tablet)|Take one pill twice a day.|I forgot to take my pill.
+a syringe|The nurse picked up the syringe.|He's afraid of syringes.
+a thermometer|The nurse took my temperature with a thermometer.|The thermometer says it's thirty degrees.
+a bar of soap|Wash your hands with soap and water.|There's no soap in the bathroom.
+a traffic light|Stop at the red traffic light.|Turn left at the next traffic light.
+a stop sign|The driver ignored the stop sign.|You must stop at the stop sign.
+roadworks (a road barrier)|There are roadworks on the motorway.|The roadworks caused a long delay.
+a petrol pump (US: a gas pump)|I stopped at the petrol pump to fill up.|Is there a petrol pump near here?
+an ambulance|Call an ambulance!|The ambulance arrived within minutes.
+a fire engine|The fire engine arrived quickly.|Everyone got out of the way of the fire engine.
+a police car|A police car stopped outside the house.|I heard a police car siren.
+a scooter|The kids ride their scooters to school.|I bought an electric scooter.
+a motorbike|He rides a motorbike to work.|You must wear a helmet on a motorbike.
+a lift (US: an elevator)|The lift is out of order.|Take the lift to the fifth floor.
+a door|Close the door behind you.|Someone is knocking at the door.
+a pot plant (houseplant)|Don't forget to water the plant.|The plant needs more light.
+a dress|She wore a long red dress.|I need a new dress for the wedding.
+a tie|He wore a suit and a tie.|Can you help me with my tie?
+a coat|Take your coat — it's cold.|She hung her coat on the hook.
+a high-heeled shoe|I can't walk far in high heels.|She took off her high-heeled shoes.
+a cap|He always wears a baseball cap.|Put your cap on, the sun is strong.
+glasses|I can't read without my glasses.|Where did I put my glasses?
+sunglasses|Don't forget your sunglasses.|She put on her sunglasses.
+shorts|It's so hot that I'm wearing shorts.|He plays football in shorts.
+socks|I have a hole in my sock.|Put on some warm socks.
+jeans|These jeans are too tight.|I wear jeans almost every day.
+a tin (US: a can)|Open a tin of tomatoes.|Please recycle the tin.
+a baby bottle|The baby is drinking from a bottle.|Warm the bottle before feeding him.
+a teddy bear|The child sleeps with a teddy bear.|He gave her a teddy bear.
+a shopping bag|Do you need a shopping bag?|She came out of the shop with three bags.
 """
 
     /** picture action | example sentence | example sentence */
     const val PICTURE_ACTIONS = """
 shrugging (shrug your shoulders)|When I asked him why, he just shrugged.|She shrugged her shoulders and walked away.
 facepalming|He facepalmed when he saw the mistake.|I facepalmed when I realised I'd sent the email to the wrong person.
-bowing|The actors bowed at the end of the play.|In Japan, people bow to say hello.
 yawning|Stop yawning — am I boring you?|Yawning is contagious.
 sneezing|I can't stop sneezing — it must be the pollen.|He covered his mouth when he sneezed.
-grimacing|She grimaced when she tasted the medicine.|He grimaced with pain.
-saluting|The soldiers saluted the general.|He saluted the flag.
-peeking|The kids were peeking through the door.|No peeking — close your eyes!
 shushing|The librarian shushed the noisy students.|She put her finger on her lips to shush me.
 shivering|I was shivering at the bus stop.|He was shivering with cold.
-drooling|The dog was drooling at the smell of meat.|The baby is drooling — he must be teething.
 sighing (exhaling)|She sighed and closed her laptop.|He let out a long sigh of relief.
 giggling|The girls were giggling at the back of the class.|Stop giggling — it's not funny!
-gasping|The audience gasped when he fell.|She gasped in surprise.
 clapping|Everyone was clapping and cheering.|The children clapped along to the song.
 shaking hands|They shook hands and agreed on the deal.|It's polite to shake hands when you meet someone.
 crossing your fingers|I'm crossing my fingers for your exam.|Keep your fingers crossed for me!
 pointing (at you)|It's rude to point at people.|She pointed at the map.
 waving|She waved goodbye from the train.|He waved at me from across the street.
-pressing your palms together|He pressed his palms together to say thank you.|She pressed her palms together and closed her eyes.
 painting your nails|She was painting her nails red.|Don't touch anything — I've just painted my nails.
 taking a selfie|They took a selfie in front of the Eiffel Tower.|Can you take a selfie with me?
-doing a cartwheel|She did a cartwheel on the grass.|Can you do a cartwheel?
 rock climbing|We went rock climbing in the mountains.|Rock climbing needs strong arms.
-fencing|He has done fencing since he was a kid.|Fencing is an Olympic sport.
 juggling|He was juggling three balls.|She's juggling work and family.
 meditating|I meditate for ten minutes every morning.|He was meditating in the garden.
 surfing|We went surfing in Portugal.|He's learning to surf.
 rowing|They were rowing across the lake.|Rowing is great exercise.
 kneeling|She knelt down to tie her shoe.|He was kneeling on the floor.
 lifting weights|He lifts weights at the gym three times a week.|Don't lift weights that are too heavy.
-wrestling|The two boys were wrestling on the grass.|Wrestling is popular in Turkey.
-teeing off (playing golf)|He teed off at nine o'clock.|We play golf every Sunday.
 lying in bed|I was lying in bed reading.|He's lying in bed with a cold.
 parachuting (skydiving)|She went skydiving for her 30th birthday.|The soldiers parachuted into the area.
 snowboarding|We went snowboarding in the Alps.|Snowboarding is harder than it looks.
@@ -450,23 +450,35 @@ cooking|He's cooking dinner for us tonight.|I love cooking Italian food.
 running (jogging)|I go jogging in the park every morning.|She was running to catch the bus.
 walking|We walked along the beach.|I walk to work when it's sunny.
 standing still|Stand still while I take the photo!|The guard was standing still for hours.
-walking with a cane|My grandfather walks with a cane.|After the operation, she walked with a cane for a month.
 feeding a baby|She was feeding the baby with a bottle.|It's time to feed the baby.
-being pregnant|She's pregnant with her second child.|My sister is six months pregnant.
 swimming|I go swimming twice a week.|They were swimming in the lake.
-playing water polo|They play water polo at the local pool.|Water polo is a very tiring sport.
 cycling|I cycle to work every day.|We went cycling along the river.
-throwing a ball (handball)|Throw the ball to me!|He threw the ball over the fence.
 horse riding (racing)|She goes horse riding at weekends.|We watched the horse racing on TV.
-making an OK sign with your arms|She made a big OK sign with her arms to show everything was fine.|He put his arms over his head in a circle — OK!
-crossing your arms (no!)|She crossed her arms to say no.|He crossed his arms in an X — not allowed!
-tipping your hand|The receptionist tipped her hand towards the lifts.|She tipped her hand as if to say "here you are".
 raising your hand|Raise your hand if you have a question.|She raised her hand to answer.
-holding up your hand|He held up his hand to stop the traffic.|She held up her hand and said, "Wait!"
 writing|She's writing a letter to her friend.|I'm writing my essay.
 hugging|They hugged at the airport.|Give me a hug!
 kissing|They kissed goodbye at the station.|He kissed her on the cheek.
 shouting (speaking loudly)|There's no need to shout — I can hear you.|He was shouting at the referee.
+sleeping|The baby is sleeping.|I was so tired that I slept for ten hours.
+crying|The little girl is crying.|He cried when he heard the news.
+laughing|We were laughing at the joke.|She laughed so much that she cried.
+thinking|He's thinking about what to cook.|Let me think about it.
+winking|He winked at me across the room.|She gave me a wink.
+being angry|He was angry about the delay.|She got angry and left.
+rolling your eyes|She rolled her eyes when he told the joke again.|Don't roll your eyes at me!
+blowing a kiss|She blew him a kiss from the train.|He blew a kiss to the crowd.
+screaming|She screamed when she saw the spider.|The children were screaming on the rollercoaster.
+celebrating|They are celebrating her birthday.|We celebrated with cake.
+feeling sick|I feel sick after the boat trip.|He looked pale and sick.
+having a fever|She stayed in bed with a fever.|I think I have a fever.
+sweating|I'm sweating after the run.|He was sweating in the sun.
+feeling dizzy|I felt dizzy when I stood up.|She sat down because she felt dizzy.
+working on a laptop|She's working on a laptop in the café.|I work on a laptop all day.
+teaching|He's teaching a class.|My sister teaches maths.
+getting a haircut|I'm getting a haircut tomorrow.|She got a haircut at the salon.
+getting a massage|He got a massage after the match.|I need a massage; my back hurts.
+dancing|They were dancing all night.|She loves dancing salsa.
+singing|He's singing in the shower.|She sings in a choir.
 """
 
     /** cloze text | grammar topic | example | example */

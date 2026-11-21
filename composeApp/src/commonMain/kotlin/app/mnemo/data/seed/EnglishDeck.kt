@@ -21,7 +21,7 @@ object EnglishDeck {
     const val ROOT = "English (B1–B2)"
 
     /** Bump when the content changes; older installs are updated on the next launch. */
-    const val VERSION = 2
+    const val VERSION = 3
 
     data class Section(
         val name: String,
@@ -32,8 +32,11 @@ object EnglishDeck {
     val vocabulary = Section("1. Vocabulary", 5, "vocabulary")
     val idioms = Section("2. Idioms & phrasal verbs", 3, "idiom")
     val situations = Section("3. What to say", 3, "situation")
-    val pictures = Section("4. Name it (pictures)", 3, "picture")
+    val pictures = Section("4. Things to know", 3, "picture")
     val grammar = Section("5. Grammar", 2, "grammar")
+
+    /** What [pictures] was called before it was cut down to the useful things (version 2). */
+    private const val OLD_PICTURES = "4. Name it (pictures)"
 
     /** Grammar topics: tag on the cards → concept name on the graph. */
     val topics =
@@ -114,21 +117,53 @@ object EnglishDeck {
         packs(vocabulary, "Vocabulary", vocabularyCards(), NoteKind.Vocab)
         packs(idioms, "Idioms", idiomCards(), NoteKind.Basic)
         packs(situations, "Situations", situationCards(), NoteKind.Basic)
-        packs(
-            pictures,
-            "Things",
-            pictureCards(EnglishDeckContent.PICTURE_THINGS, EnglishDeckExtras.PICTURE_THINGS, "What is this called?"),
-            NoteKind.Basic,
-        )
-        packs(
-            pictures,
-            "Actions",
-            pictureCards(EnglishDeckContent.PICTURE_ACTIONS, EnglishDeckExtras.PICTURE_ACTIONS, "What is this person doing?"),
-            NoteKind.Basic,
-        )
+        // Version 3 cut the pictures down to the useful ones: the section is renamed in place, its
+        // cards move to the right pack, cards nobody uses are removed and new useful ones added.
+        // A section the user deleted is not brought back.
+        val decks = graph.decks.all()
+        val rootDeck = decks.firstOrNull { it.name == ROOT && it.parentId == null }
+
+        fun sectionOf(name: String) = rootDeck?.let { r -> decks.firstOrNull { it.name == name && it.parentId == r.id } }
+        val old = sectionOf(OLD_PICTURES)
+        val oldIds = old?.let { graph.decks.subtreeIds(it.id) }.orEmpty()
+        val pool = oldIds.flatMap { graph.notes.byDeck(it) }
+        val things = thingCards()
+        val actions = actionCards()
+        if (old != null) {
+            graph.decks.rename(old.id, pictures.name)
+            // Its concept on the knowledge graph follows the new name.
+            graph.concepts
+                .all()
+                .firstOrNull { it.name == OLD_PICTURES && it.description.startsWith("deck:") }
+                ?.let { graph.concepts.update(it.copy(name = pictures.name)) }
+            seed.adopt(pool, "Front")
+            // Cards added in version 3 are new even on an install that is only being updated.
+            seed.alwaysCreate(thingCards(onlyNew = true) + actionCards(onlyNew = true))
+        }
+        if (fresh || old != null || sectionOf(pictures.name) != null) {
+            packs(pictures, "Things", things, NoteKind.Basic)
+            packs(pictures, "Actions", actions, NoteKind.Basic)
+        }
+        // Seed cards that are no longer in the deck (the rare ones), if you never edited them.
+        val kept = (things + actions).map { it.fields.getValue("Front") }.toSet()
+        val retired =
+            pool.filter { n ->
+                n.fields["Front"] !in kept && n.updatedAt == n.createdAt && n.tags == listOf("english", pictures.tag)
+            }
         packs(grammar, "Grammar", grammarCards(), NoteKind.Cloze)
-        return seed.commit()
+        val changed = seed.commit() + retired.size
+        retired.forEach { graph.notes.delete(it.id) }
+        // Packs the move left empty.
+        val all = graph.decks.all()
+        oldIds.forEach { id ->
+            val deck = all.firstOrNull { it.id == id } ?: return@forEach
+            val isPack = deck.parentId != null && deck.name.matches(PACK_NAME)
+            if (isPack && all.none { it.parentId == id } && graph.notes.countByDeck(id) == 0L) graph.decks.delete(id)
+        }
+        return changed
     }
+
+    private val PACK_NAME = Regex(".* \\d\\d")
 
     internal fun quote(examples: List<String>) = examples.joinToString("\n\n") { "> $it" }
 
@@ -158,6 +193,25 @@ object EnglishDeck {
                     "Back" to "**$say**\n\nOther ways to say it:\n\n" + ways.joinToString("\n") { "- $it" },
                 ),
             )
+        }
+    }
+
+    private const val THINGS_QUESTION = "What is this called?"
+    private const val ACTIONS_QUESTION = "What is this person doing?"
+
+    /** The pictures of things worth knowing; [onlyNew] = just those added in version 3. */
+    internal fun thingCards(onlyNew: Boolean = false): List<Card> {
+        val v3 = pictureCards(EnglishDeckContent.PICTURE_THINGS_V3, EnglishDeckExtras.PICTURE_THINGS, THINGS_QUESTION)
+        return if (onlyNew) v3 else pictureCards(EnglishDeckContent.PICTURE_THINGS, EnglishDeckExtras.PICTURE_THINGS, THINGS_QUESTION) + v3
+    }
+
+    internal fun actionCards(onlyNew: Boolean = false): List<Card> {
+        val v3 = pictureCards(EnglishDeckContent.PICTURE_ACTIONS_V3, EnglishDeckExtras.PICTURE_ACTIONS, ACTIONS_QUESTION)
+        return if (onlyNew) {
+            v3
+        } else {
+            pictureCards(EnglishDeckContent.PICTURE_ACTIONS, EnglishDeckExtras.PICTURE_ACTIONS, ACTIONS_QUESTION) +
+                v3
         }
     }
 

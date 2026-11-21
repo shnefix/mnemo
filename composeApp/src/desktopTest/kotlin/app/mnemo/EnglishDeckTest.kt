@@ -34,8 +34,8 @@ class EnglishDeckTest {
                 "vocabulary" to (EnglishDeckContent.VOCABULARY to 3),
                 "idioms" to (EnglishDeckContent.IDIOMS to 3),
                 "situations" to (EnglishDeckContent.SITUATIONS to 3),
-                "things" to (EnglishDeckContent.PICTURE_THINGS to 3),
-                "actions" to (EnglishDeckContent.PICTURE_ACTIONS to 3),
+                "things" to (EnglishDeckContent.PICTURE_THINGS + EnglishDeckContent.PICTURE_THINGS_V3 to 3),
+                "actions" to (EnglishDeckContent.PICTURE_ACTIONS + EnglishDeckContent.PICTURE_ACTIONS_V3 to 3),
                 "grammar" to (EnglishDeckContent.GRAMMAR to 2),
             )
         sets.forEach { (name, pair) ->
@@ -78,8 +78,14 @@ class EnglishDeckTest {
         check("vocabulary", EnglishDeckContent.VOCABULARY, EnglishDeckExtras.VOCABULARY, 0, 3)
         check("idioms", EnglishDeckContent.IDIOMS, EnglishDeckExtras.IDIOMS, 0, 3)
         check("situations", EnglishDeckContent.SITUATIONS, EnglishDeckExtras.SITUATIONS, 0, 3)
-        check("things", EnglishDeckContent.PICTURE_THINGS, EnglishDeckExtras.PICTURE_THINGS, 1, 3)
-        check("actions", EnglishDeckContent.PICTURE_ACTIONS, EnglishDeckExtras.PICTURE_ACTIONS, 1, 3)
+        check("things", EnglishDeckContent.PICTURE_THINGS + EnglishDeckContent.PICTURE_THINGS_V3, EnglishDeckExtras.PICTURE_THINGS, 1, 3)
+        check(
+            "actions",
+            EnglishDeckContent.PICTURE_ACTIONS + EnglishDeckContent.PICTURE_ACTIONS_V3,
+            EnglishDeckExtras.PICTURE_ACTIONS,
+            1,
+            3,
+        )
         check("grammar", EnglishDeckContent.GRAMMAR, EnglishDeckExtras.GRAMMAR, 0, 4)
         EnglishDeck.rows(EnglishDeckExtras.GRAMMAR).forEach { r ->
             assertTrue(r[1] in EnglishDeck.topics, "unknown grammar topic ${r[1]} in $r")
@@ -182,6 +188,77 @@ class EnglishDeckTest {
             // Still looks unedited, so a later version can update it again.
             val after = g.notes.byId(untouched.id)!!
             assertEquals(after.createdAt, after.updatedAt)
+        }
+
+    /** Version 2 → 3: the pictures section is renamed, cards move packs, unused ones go, new ones arrive. */
+    @Test
+    fun upgradeCutsPicturesDownToThingsToKnow() =
+        runBlocking {
+            val clock = TestClock()
+            val g = graph(clock)
+            g.seed()
+            EnglishDeck.install(g)
+            val keep = (EnglishDeck.thingCards() + EnglishDeck.actionCards()).map { it.fields.getValue("Front") }.toSet()
+            val newOnes =
+                (
+                    EnglishDeck.thingCards(
+                        onlyNew = true,
+                    ) + EnglishDeck.actionCards(onlyNew = true)
+                ).map { it.fields.getValue("Front") }.toSet()
+            val decks = g.decks.all()
+            val section = decks.first { it.name == EnglishDeck.pictures.name }
+            val root = decks.first { it.name == EnglishDeck.ROOT }
+            // Rebuild what a version 2 install looked like: old name, everything in one messy pack,
+            // the new cards missing, two rare cards the user never touched and one they edited.
+            g.decks.rename(section.id, "4. Name it (pictures)")
+            val mess = g.decks.createByPath("${EnglishDeck.ROOT}::4. Name it (pictures)::Things 99")
+            val basic = g.notes.noteTypeOf(NoteKind.Basic)
+            val tags = listOf("english", "picture")
+            val rare1 = g.notes.create(mess, basic, mapOf("Front" to "# 🧮\n\nWhat is this called?", "Back" to "an abacus"), tags)
+            val rare2 = g.notes.create(mess, basic, mapOf("Front" to "# ⚗️\n\nWhat is this called?", "Back" to "an alembic"), tags)
+            val mine = g.notes.create(mess, basic, mapOf("Front" to "# 🪦\n\nWhat is this called?", "Back" to "a headstone"), tags)
+            // The user edits their card later.
+            clock.time += 60_000
+            g.notes.update(mine, mess, mapOf("Front" to "# 🪦\n\nWhat is this called?", "Back" to "a gravestone (mine)"), tags)
+            val all = g.decks.all()
+            val picturePacks = all.filter { d -> d.parentId == section.id }
+
+            suspend fun fronts(id: Long) = g.notes.byDeck(id).map { it.fields.getValue("Front") }
+            // Move every seeded picture card into the messy pack and drop the new ones.
+            picturePacks.filter { it.id != mess }.forEach { p ->
+                g.notes.byDeck(p.id).forEach { n ->
+                    if (n.fields.getValue("Front") in newOnes) g.notes.delete(n.id) else g.notes.moveToDeck(n.id, mess)
+                }
+            }
+            g.notes
+                .byDeck(mess)
+                .filter { it.id !in listOf(rare1, rare2, mine) }
+                .forEach { g.notes.markUnedited(listOf(it.id)) }
+            val before = g.notes.countAll()
+            assertTrue(fronts(mess).size > 100)
+
+            EnglishDeck.install(g, fresh = false)
+
+            val after = g.decks.all()
+            assertTrue(after.none { it.name == "4. Name it (pictures)" } && after.any { it.name == EnglishDeck.pictures.name })
+            val inSection = after.filter { it.parentId == section.id }
+            val sectionFronts = inSection.flatMap { fronts(it.id) }.toSet()
+            assertTrue(newOnes.all { it in sectionFronts }, "new cards are added")
+            assertTrue(keep.all { it in sectionFronts }, "every useful card is in the section")
+            assertEquals(keep.size + 1, sectionFronts.size, "only your edited card is left besides the useful ones")
+            assertEquals(null, g.notes.byId(rare1))
+            assertEquals(null, g.notes.byId(rare2))
+            assertEquals("a gravestone (mine)", g.notes.byId(mine)!!.fields["Back"])
+            assertEquals(before - 2 + newOnes.size, g.notes.countAll())
+            val packs = inSection.filter { it.name.matches(Regex(".* \\d\\d")) }
+            packs.filter { it.name != "Things 99" }.forEach { p ->
+                assertTrue(g.notes.countByDeck(p.id) in 1..EnglishDeck.PACK_SIZE, "${p.name} has ${g.notes.countByDeck(p.id)}")
+            }
+            // Running it again changes nothing.
+            val count = g.notes.countAll()
+            EnglishDeck.install(g, fresh = false)
+            assertEquals(count, g.notes.countAll())
+            assertEquals(root.id, after.first { it.name == EnglishDeck.pictures.name }.parentId)
         }
 
     @Test

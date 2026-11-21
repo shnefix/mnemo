@@ -285,41 +285,24 @@ You want to pass someone in a crowd.|Excuse me, could I just squeeze past?|Sorry
 🪛|a screwdriver|turns screws
 🔧|a spanner (US: a wrench)|turns nuts and bolts
 🪚|a saw|cuts wood
-🪓|an axe|chops wood
-⛏️|a pickaxe|breaks rocks and hard ground
 🔩|a nut and bolt|they hold metal parts together
-🗜️|a clamp (vice)|holds things tightly while you work
 🧲|a magnet|attracts metal
 🪝|a hook|you hang things on it
 🧷|a safety pin|a pin with a cover over the point
 🪡|a sewing needle|used with thread to sew
-🧵|a spool of thread|thread wound on a reel
-🧶|a ball of yarn (wool)|used for knitting
 🪢|a knot|what you tie in a rope
 ⛓️|a chain|connected metal rings
-🛟|a lifebuoy (life ring)|thrown to someone in the water
-⚓|an anchor|stops a ship from moving
 🧭|a compass|shows north
-⏳|an hourglass|sand shows time passing
 ⚖️|scales (a balance)|measures weight; symbol of justice
-🧮|an abacus|counting frame with beads
 📎|a paperclip|holds papers together
 📌|a drawing pin (US: a thumbtack)|pins paper to a board
-📐|a set square (triangular ruler)|draws angles
-🖋️|a fountain pen|a pen with a metal nib and ink
 🖍️|a crayon|wax colour for children
-🗃️|a card file box|stores index cards
 🗄️|a filing cabinet|metal drawers for documents
 🧾|a receipt|paper proof that you paid
 🪪|an ID card|shows who you are
 🔌|a plug|connects a device to the power socket
 🪫|a low battery|it needs charging
 🕯️|a candle|wax with a wick
-🪔|an oil lamp|a small lamp burning oil
-🏮|a paper lantern|a lamp made of paper
-🧨|a firecracker|explodes with a bang
-🪅|a piñata|a decorated figure full of sweets
-🎐|a wind chime|rings when the wind blows
 🪭|a folding fan|you wave it to cool down
 🪤|a mousetrap|catches mice
 🧹|a broom|for sweeping the floor
@@ -343,102 +326,123 @@ You want to pass someone in a crowd.|Excuse me, could I just squeeze past?|Sorry
 🔪|a kitchen knife|for cutting food
 🥢|chopsticks|two sticks for eating
 🍳|a frying pan|for cooking eggs
-🫕|a fondue pot|melted cheese for dipping
 🧂|a salt shaker|holds salt
-🧇|a waffle|a square pattern cake
-🥨|a pretzel|a twisted, salty bread
-🥟|a dumpling|dough with filling
-🫓|a flatbread|bread that is not risen
 🥐|a croissant|a French crescent pastry
 🦔|a hedgehog|small animal covered in spines
-🦫|a beaver|builds dams in rivers
-🦦|an otter|swims and floats on its back
-🦥|a sloth|very slow animal that hangs in trees
-🦡|a badger|black and white striped face; digs
 🐿️|a squirrel|collects nuts; bushy tail
-🦩|a flamingo|pink bird standing on one leg
-🦚|a peacock|bird with a colourful fan tail
 🪶|a feather|covers a bird's body
-🦭|a seal|sea animal that barks
-🦙|a llama|South American animal with long neck
 🦘|a kangaroo|carries its baby in a pouch
-🪸|coral|lives in warm seas; forms reefs
 🍄|a mushroom|a fungus; some are poisonous
 🌵|a cactus|desert plant with spines
 🪨|a rock (boulder)|a big stone
 🌋|a volcano|a mountain that erupts lava
 🛷|a sledge (US: sled)|slides on snow
-🛼|a roller skate|a boot with four wheels
 🪁|a kite|flies in the wind on a string
-🪀|a yo-yo|toy that goes up and down a string
-🪗|an accordion|instrument you squeeze
-🪕|a banjo|instrument with strings and a round body
 🎻|a violin|played with a bow
 🎺|a trumpet|brass instrument you blow
 🔭|a telescope|looks at stars
 🔬|a microscope|looks at very small things
-⚗️|an alembic (still)|old glass equipment for distilling
-🧪|a test tube|a thin glass tube for experiments
-🧫|a petri dish|a flat dish for growing bacteria
 🩺|a stethoscope|doctor listens to your heart
 🩹|a plaster (US: a Band-Aid)|covers a small cut
 🩼|a crutch|helps you walk with an injured leg
-🦯|a white cane|used by blind people
 🦽|a wheelchair|a chair with wheels
-⚱️|an urn|holds ashes after cremation
-🪦|a headstone (gravestone)|stone on a grave
 🥾|a hiking boot|strong shoe for walking in nature
 🩴|a flip-flop|simple sandal with a strap between the toes
-🩰|ballet shoes|soft shoes for dancing
 🎒|a backpack (rucksack)|bag you carry on your back
-👝|a pouch|a small bag
-🪖|a military helmet|protects a soldier's head
-🎓|a mortarboard (graduation cap)|worn at graduation
 🦺|a high-visibility vest|bright vest for safety
 🥽|goggles|protect your eyes
 🧤|gloves|keep your hands warm
 🧣|a scarf|worn around the neck
-🛎️|a service bell (reception bell)|you ring it at a hotel desk
-🗝️|an old key|opens a lock
 🧱|a brick|building block for walls
-🛢️|an oil drum (barrel)|big metal container for oil
+"""
+
+    /** Added in version 3 in place of the rare things: more everyday things worth knowing. picture (emoji) | name | hint */
+    const val PICTURE_THINGS_V3 = """
+💡|a light bulb|gives light when you switch it on
+🚰|a tap (US: a faucet)|water comes out when you turn it
+🧊|an ice cube|frozen water for cold drinks
+🛒|a shopping trolley (US: a shopping cart)|you push it round the supermarket
+👛|a purse|a small bag for coins and cards
+💳|a credit card|a plastic card for paying
+💵|a banknote (US: a bill)|paper money
+🪙|a coin|a small round piece of metal money
+🧳|a suitcase|a bag for your clothes when you travel
+🔒|a padlock|a lock you can carry, opened with a key or code
+🔑|a key|opens a lock
+📅|a calendar|shows days, weeks and months
+✉️|an envelope|the paper cover for a letter
+📦|a parcel (US: a package)|something wrapped to be posted
+📏|a ruler|a straight stick for measuring and drawing lines
+📓|a notebook|a book with blank pages for writing
+🗑️|a bin (US: a trash can)|you throw rubbish in it
+🔨|a hammer|you hit nails with it
+🔦|a torch (US: a flashlight)|a small light you carry in your hand
+🎧|headphones|you wear them over your ears to listen privately
+💻|a laptop|a portable computer
+⌨️|a keyboard|the keys you type on
+🖱️|a computer mouse|you move it to control the cursor
+🖨️|a printer|prints documents on paper
+📺|a television (TV)|a screen for watching programmes
+📻|a radio|you listen to music and news on it
+🔋|a battery|stores power for a device
+⏰|an alarm clock|wakes you up at a set time
+⌚|a watch|a small clock you wear on your wrist
+💊|a pill (tablet)|medicine you swallow
+💉|a syringe|a needle used to give medicine or take blood
+🌡️|a thermometer|measures temperature
+🧼|a bar of soap|you wash your hands with it
+🚦|a traffic light|red, amber and green signals for cars
+🛑|a stop sign|a red sign telling drivers to stop
+🚧|roadworks (a road barrier)|workers repairing the road
+⛽|a petrol pump (US: a gas pump)|where you fill your car with fuel
+🚑|an ambulance|takes sick or injured people to hospital
+🚒|a fire engine|the truck firefighters drive
+🚓|a police car|a car used by the police
+🛴|a scooter|a vehicle you stand on and push
+🏍️|a motorbike|a two-wheeled vehicle with an engine
+🛗|a lift (US: an elevator)|takes you up and down in a building
+🚪|a door|you open it to go in or out
+🪴|a pot plant (houseplant)|a plant grown indoors
+👗|a dress|a one-piece piece of clothing for women
+👔|a tie|a strip of cloth worn round the neck with a shirt
+🧥|a coat|warm clothing worn over other clothes
+👠|a high-heeled shoe|a shoe with a raised heel
+🧢|a cap|a soft hat with a peak at the front
+👓|glasses|you wear them to see better
+🕶️|sunglasses|dark glasses for sunny days
+🩳|shorts|short trousers
+🧦|socks|worn on your feet inside shoes
+👖|jeans|blue trousers made of denim
+🥫|a tin (US: a can)|a metal container for food
+🍼|a baby bottle|a bottle for feeding milk to a baby
+🧸|a teddy bear|a soft toy bear
+🛍️|a shopping bag|a bag for carrying what you bought
 """
 
     /** picture (emoji) | action | hint */
     const val PICTURE_ACTIONS = """
 🤷|shrugging (shrug your shoulders)|showing you don't know or don't care
 🤦|facepalming|putting your hand on your face in disbelief
-🙇|bowing|bending forward to show respect
 🥱|yawning|opening your mouth wide when tired
 🤧|sneezing|"Achoo!"
-😬|grimacing|a tense face when something is awkward
-🫡|saluting|a military greeting with the hand
-🫣|peeking|looking through your fingers
 🤫|shushing|telling someone to be quiet
 🥶|shivering|shaking because you are cold
-🤤|drooling|liquid coming from your mouth
 😮‍💨|sighing (exhaling)|breathing out with relief or tiredness
 🤭|giggling|laughing quietly, hand over mouth
-🫢|gasping|breathing in suddenly in surprise
 👏|clapping|hitting your hands together
 🤝|shaking hands|a greeting or agreement
 🤞|crossing your fingers|hoping for good luck
 🫵|pointing (at you)|showing someone with your finger
 👋|waving|moving your hand to say hello or goodbye
-🙏|pressing your palms together|praying, or saying please / thank you
 💅|painting your nails|putting nail polish on
 🤳|taking a selfie|photographing yourself
-🤸|doing a cartwheel|turning sideways on your hands and feet
 🧗|rock climbing|going up a wall or cliff
-🤺|fencing|fighting with swords as a sport
 🤹|juggling|throwing and catching several balls
 🧘|meditating|sitting quietly with crossed legs
 🏄|surfing|riding a wave on a board
 🚣|rowing|moving a boat with oars
 🧎|kneeling|resting on your knees
 🏋️|lifting weights|raising a heavy bar
-🤼|wrestling|fighting by holding and throwing
-🏌️|teeing off (playing golf)|hitting a golf ball
 🛌|lying in bed|resting or sleeping
 🪂|parachuting (skydiving)|jumping from a plane
 🏂|snowboarding|sliding down snow on one board
@@ -448,23 +452,39 @@ You want to pass someone in a crowd.|Excuse me, could I just squeeze past?|Sorry
 🏃|running (jogging)|moving fast on foot
 🚶|walking|moving on foot slowly
 🧍|standing still|on your feet, not moving
-🧑‍🦯|walking with a cane|a blind person finding the way
 🧑‍🍼|feeding a baby|giving a bottle of milk
-🤰|being pregnant|expecting a baby
 🏊|swimming|moving through water
-🤽|playing water polo|ball game in a pool
 🚴|cycling|riding a bike
-🤾|throwing a ball (handball)|team sport with a ball thrown by hand
 🏇|horse riding (racing)|sitting on a horse
-🙆|making an OK sign with your arms|arms above your head in a circle
-🙅|crossing your arms (no!)|showing "no" or "stop"
-💁|tipping your hand|giving information, a bit cheeky
 🙋|raising your hand|asking to speak in class
-🤚|holding up your hand|stop, or "high five" before it happens
 ✍️|writing|using a pen on paper
 🫂|hugging|holding someone in your arms
 💏|kissing|touching lips
 🗣️|shouting (speaking loudly)|a head with sound coming out
+"""
+
+    /** Added in version 3: more everyday actions and feelings. picture (emoji) | action | hint */
+    const val PICTURE_ACTIONS_V3 = """
+😴|sleeping|resting with your eyes closed
+😭|crying|tears coming from your eyes
+😂|laughing|making a happy sound at something funny
+🤔|thinking|using your mind to decide something
+😉|winking|closing one eye quickly
+😠|being angry|feeling very annoyed
+🙄|rolling your eyes|moving your eyes up to show you're annoyed
+😘|blowing a kiss|sending a kiss through the air
+😱|screaming|shouting loudly in fear
+🥳|celebrating|having a party for something good
+🤢|feeling sick|feeling that you might vomit
+🤒|having a fever|having a high temperature when ill
+🥵|sweating|having water on your skin because you are hot
+🥴|feeling dizzy|feeling that the room is spinning
+🧑‍💻|working on a laptop|using a computer to do your job
+🧑‍🏫|teaching|helping students to learn
+💇|getting a haircut|having your hair cut
+💆|getting a massage|having your muscles rubbed to relax
+💃|dancing|moving to music
+🧑‍🎤|singing|making music with your voice
 """
 
     /** cloze text | explanation shown on the back */
