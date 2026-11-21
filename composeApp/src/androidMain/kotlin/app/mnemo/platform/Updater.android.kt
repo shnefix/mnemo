@@ -61,6 +61,7 @@ actual object Updater {
                     versionName = root["name"]?.jsonPrimitive?.content ?: "v$code",
                     apkUrl = apk["browser_download_url"]!!.jsonPrimitive.content,
                     notes = root["body"]?.jsonPrimitive?.content.orEmpty(),
+                    sizeBytes = apk["size"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0,
                 )
             }.getOrNull()
         }
@@ -83,7 +84,26 @@ actual object Updater {
                     val f = File(dir, "mnemo-${update.versionCode}.apk")
                     val conn = URL(update.apkUrl).openConnection() as HttpURLConnection
                     conn.instanceFollowRedirects = true
+                    conn.connectTimeout = 15_000
+                    conn.readTimeout = 30_000
+                    check(conn.responseCode == 200) { "GitHub answered ${conn.responseCode} instead of the update. Try again later." }
                     conn.inputStream.use { input -> f.outputStream().use { input.copyTo(it) } }
+                    // Android only says "problem parsing the package" for a cut-off or wrong file,
+                    // so check it here and say what actually went wrong.
+                    if (update.sizeBytes > 0 && f.length() != update.sizeBytes) {
+                        val got = f.length()
+                        f.delete()
+                        error(
+                            "The download was incomplete ($got of ${update.sizeBytes} bytes). Check your connection and tap Install again.",
+                        )
+                    }
+                    val pkg = ctx.packageManager.getPackageArchiveInfo(f.path, 0)
+                    if (pkg == null || pkg.packageName != ctx.packageName) {
+                        f.delete()
+                        error(
+                            "The downloaded file is not a Mnemo update. A network filter may be blocking GitHub downloads: try another network.",
+                        )
+                    }
                     f
                 }
             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.updates", file)

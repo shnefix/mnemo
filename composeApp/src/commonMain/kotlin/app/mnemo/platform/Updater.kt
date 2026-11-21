@@ -6,6 +6,8 @@ data class AppUpdate(
     val versionName: String,
     val apkUrl: String,
     val notes: String,
+    /** Size of the APK in bytes, to tell a complete download from a cut-off one; 0 = unknown. */
+    val sizeBytes: Long = 0,
 )
 
 /** Self-update from GitHub Releases (Android). Android always asks the user to confirm the install. */
