@@ -96,6 +96,45 @@ class EnglishDeckTest {
     }
 
     @Test
+    fun numberCardsHaveThreeExamplesAndInstallOnUpdate() =
+        runBlocking {
+            val rows = EnglishDeck.rows(app.mnemo.data.seed.EnglishNumbersContent.NUMBERS)
+            assertTrue(rows.size >= 40)
+            rows.forEach { r ->
+                assertEquals(6, r.size, "bad row $r")
+                assertTrue(r.all { it.isNotBlank() }, "empty field in $r")
+            }
+            assertEquals(rows.size, rows.map { it[0] }.toSet().size, "duplicate written form")
+            assertTrue(
+                EnglishDeck.numberCards().all { c ->
+                    c.fields
+                        .getValue("Back")
+                        .lines()
+                        .count { it.startsWith("> ") } == 3
+                },
+            )
+            // An install from before this section existed gets it when it updates (version 3 → 4).
+            val g = graph()
+            g.seed()
+            EnglishDeck.install(g)
+            val section = g.decks.all().first { it.name == EnglishDeck.numbers.name }
+            g.decks.subtreeIds(section.id).forEach { d -> g.notes.byDeck(d).forEach { g.notes.delete(it.id) } }
+            val before = g.notes.countAll()
+            val added = EnglishDeck.install(g, fresh = false, from = 3)
+            assertEquals(rows.size, added)
+            assertEquals(before + rows.size, g.notes.countAll())
+            // A card the user deleted later is not brought back once the section exists in their version.
+            val pack = g.decks.all().first { it.name == "Numbers 01" }
+            g.notes.delete(
+                g.notes
+                    .byDeck(pack.id)
+                    .first()
+                    .id,
+            )
+            assertEquals(0, EnglishDeck.install(g, fresh = false, from = 4))
+        }
+
+    @Test
     fun cardsShowAllTheirExamples() =
         runBlocking {
             val g = graph()

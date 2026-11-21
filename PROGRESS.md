@@ -39,8 +39,14 @@
   renames the old section, moves cards to their packs and deletes seed cards that were dropped
   (edited ones are kept). `SeedInstaller.adopt` / `alwaysCreate` make that possible.
 - **German (A0) deck** (`data/seed/GermanA0Deck.kt`, content in `GermanA0Content.kt`, pref
-  `seed.german.a0`): section "1. Name it" — pictures to name in German with der/die/das and the
-  plural, verbs with the ich-form, colours and the numbers 1–10; every card has a simple example.
+  `seed.german.a0`, version 2): "1. Name it" is nested into numbered categories (Things first):
+  pictures to name with der/die/das and the plural, verbs with the ich-form, colours and numbers
+  1–10; "2. What to say" has 49 first phrases for real situations; "3. Type it (articles)" is a
+  Type-mode drill where you type der/die/das for each noun (the answer is only the article, so a
+  wrong one is never "close"). Every card has a simple example. Version 1 installs are moved over.
+- **Numbers, time & money** (English deck v4, `EnglishNumbersContent.kt`): "6. Numbers, time &
+  money" — 45 cards on how to say prices, times, dates, years, phone numbers, measurements and
+  scores, each with three examples. Added to older installs on update.
 - **Dictation cards**: a `[listen: …]` marker in a card's front is read aloud when the card
   appears (and with "Listen again") instead of being shown; such cards always get the type box.
   Speech uses the card's own deck language, so it also works from "All decks".

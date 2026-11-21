@@ -21,7 +21,7 @@ object EnglishDeck {
     const val ROOT = "English (B1–B2)"
 
     /** Bump when the content changes; older installs are updated on the next launch. */
-    const val VERSION = 3
+    const val VERSION = 4
 
     data class Section(
         val name: String,
@@ -34,6 +34,10 @@ object EnglishDeck {
     val situations = Section("3. What to say", 3, "situation")
     val pictures = Section("4. Things to know", 3, "picture")
     val grammar = Section("5. Grammar", 2, "grammar")
+    val numbers = Section("6. Numbers, time & money", 2, "numbers")
+
+    /** Version in which [numbers] was added: older installs get it on update. */
+    private const val NUMBERS_SINCE = 4
 
     /** What [pictures] was called before it was cut down to the useful things (version 2). */
     private const val OLD_PICTURES = "4. Name it (pictures)"
@@ -88,7 +92,7 @@ object EnglishDeck {
         val installed = Prefs.get(Prefs.ENGLISH_DECK)?.toIntOrNull() ?: 0
         if (installed >= VERSION) return
         val rootExists = graph.decks.all().any { it.name == ROOT && it.parentId == null }
-        if (installed == 0 || rootExists) install(graph, fresh = installed == 0)
+        if (installed == 0 || rootExists) install(graph, fresh = installed == 0, from = installed)
         Prefs.set(Prefs.ENGLISH_DECK, VERSION.toString())
     }
 
@@ -102,6 +106,7 @@ object EnglishDeck {
     suspend fun install(
         graph: AppGraph,
         fresh: Boolean = true,
+        from: Int = 0,
     ): Int {
         val seed = SeedInstaller(graph, ROOT, fresh)
         // Opening the whole English deck gives a small daily mix; opening one pack gives all of it.
@@ -151,6 +156,9 @@ object EnglishDeck {
                 n.fields["Front"] !in kept && n.updatedAt == n.createdAt && n.tags == listOf("english", pictures.tag)
             }
         packs(grammar, "Grammar", grammarCards(), NoteKind.Cloze)
+        // Added in version 4: a new section, so it is created even when only updating.
+        if (from < NUMBERS_SINCE) seed.alwaysCreate(numberCards())
+        packs(numbers, "Numbers", numberCards(), NoteKind.Basic)
         val changed = seed.commit() + retired.size
         retired.forEach { graph.notes.delete(it.id) }
         // Packs the move left empty.
@@ -226,6 +234,17 @@ object EnglishDeck {
             Card(mapOf("Front" to "# $pic\n\n$question", "Back" to "**$name**\n\n$hint\n\n${quote(examples)}".trim()))
         }
     }
+
+    /** written | how you say it | another way | three examples */
+    internal fun numberCards(): List<Card> =
+        rows(EnglishNumbersContent.NUMBERS).map { r ->
+            Card(
+                mapOf(
+                    "Front" to "**${r[0]}**\n\n*How do you say it?*",
+                    "Back" to "**${r[1]}**\n\nAnother way: ${r[2]}\n\n${quote(r.drop(3))}",
+                ),
+            )
+        }
 
     internal fun grammarCards(): List<Card> {
         val more = extras(EnglishDeckExtras.GRAMMAR)

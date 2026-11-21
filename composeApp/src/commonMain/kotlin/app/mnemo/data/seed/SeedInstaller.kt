@@ -31,7 +31,7 @@ internal class SeedInstaller(
     private var always = emptySet<String>()
 
     fun alwaysCreate(cards: List<Card>) {
-        always = cards.mapNotNull { it.fields.values.firstOrNull() }.toSet()
+        always = always + cards.mapNotNull { it.fields.values.firstOrNull() }
     }
 
     /** Lets [fill] find (and move) these notes from an older layout instead of adding copies. */

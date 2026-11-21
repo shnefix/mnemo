@@ -8,6 +8,7 @@ package app.mnemo.data.seed
  * Nouns: picture | word with article | plural ("–" = no plural) | English | example | translation
  * Verbs: picture | verb | ich-form | English | example | translation
  * Colours and numbers: picture | word | English | example | translation
+ * Situations: situation | what you say | translation | another way | translation
  */
 internal object GermanA0Content {
     const val THINGS = """
@@ -247,5 +248,57 @@ internal object GermanA0Content {
 8️⃣|acht|eight (8)|Eine Spinne hat acht Beine.|A spider has eight legs.
 9️⃣|neun|nine (9)|Es ist neun Uhr.|It is nine o'clock.
 🔟|zehn|ten (10)|Ich bin zehn Jahre alt.|I am ten years old.
+"""
+
+    const val SITUATIONS = """
+You meet someone in the morning.|Guten Morgen!|Good morning!|Morgen!|Morning!
+You meet someone during the day.|Guten Tag!|Hello! (lit. good day)|Hallo!|Hi!
+You meet someone in the evening.|Guten Abend!|Good evening!|Hallo!|Hi!
+You say goodbye.|Auf Wiedersehen!|Goodbye!|Tschüss!|Bye!
+You say goodnight.|Gute Nacht!|Good night!|Schlaf gut!|Sleep well!
+You ask a friend how they are.|Wie geht's?|How are you?|Wie geht es dir?|How are you doing?
+You ask a stranger how they are (formal).|Wie geht es Ihnen?|How are you? (formal)|Wie geht's Ihnen?|How are you? (formal)
+You are fine.|Gut, danke. Und dir?|Fine, thanks. And you?|Mir geht es gut.|I'm fine.
+You are so-so.|Es geht.|So-so.|Nicht so gut.|Not so good.
+You tell someone your name.|Ich heiße Anna.|My name is Anna.|Mein Name ist Anna.|My name is Anna.
+You ask a friend their name.|Wie heißt du?|What is your name?|Wie heißen Sie?|What is your name? (formal)
+You ask where a friend is from.|Woher kommst du?|Where are you from?|Woher kommen Sie?|Where are you from? (formal)
+You say where you are from.|Ich komme aus Spanien.|I come from Spain.|Ich bin aus Spanien.|I am from Spain.
+You meet someone for the first time.|Freut mich!|Nice to meet you!|Schön, dich kennenzulernen.|Nice to meet you.
+You hand someone something.|Bitte schön.|Here you are.|Bitte.|Please. / Here you go.
+Someone gives you something.|Danke!|Thank you!|Vielen Dank!|Thank you very much!
+Someone thanks you.|Bitte!|You're welcome!|Gern geschehen!|My pleasure!
+You bump into someone.|Entschuldigung!|Sorry! / Excuse me!|Tut mir leid.|I'm sorry.
+Someone asks if you want something and you do.|Ja, gern.|Yes, gladly.|Ja, bitte.|Yes, please.
+Someone offers something you don't want.|Nein, danke.|No, thank you.|Nein, danke, das ist nett.|No, thank you, that is kind.
+You did not understand.|Ich verstehe nicht.|I don't understand.|Das verstehe ich nicht.|I don't understand that.
+You want someone to say it again.|Noch einmal, bitte.|One more time, please.|Können Sie das bitte wiederholen?|Can you repeat that, please?
+Someone speaks too fast.|Langsamer, bitte.|Slower, please.|Sprechen Sie bitte langsamer.|Please speak more slowly.
+You want to know if someone speaks English.|Sprechen Sie Englisch?|Do you speak English? (formal)|Sprichst du Englisch?|Do you speak English?
+You say how well you speak German.|Ich spreche ein bisschen Deutsch.|I speak a little German.|Ich lerne Deutsch.|I am learning German.
+You want a word in German.|Wie sagt man "apple" auf Deutsch?|How do you say "apple" in German?|Was heißt "apple" auf Deutsch?|What does "apple" mean in German?
+You order a coffee.|Einen Kaffee, bitte.|A coffee, please.|Ich möchte einen Kaffee.|I would like a coffee.
+You order water.|Ein Wasser, bitte.|A water, please.|Ich hätte gern ein Wasser.|I would like a water.
+You want to see the menu.|Die Speisekarte, bitte.|The menu, please.|Haben Sie eine Speisekarte?|Do you have a menu?
+You want to pay in a restaurant.|Zahlen, bitte!|The bill, please!|Die Rechnung, bitte.|The bill, please.
+You want to know the price.|Wie viel kostet das?|How much is that?|Was kostet das?|What does that cost?
+Something costs too much.|Das ist zu teuer.|That is too expensive.|Das ist teuer.|That is expensive.
+You decide to buy something.|Ich nehme das.|I'll take it.|Das nehme ich.|I'll take that.
+You are looking for the station.|Wo ist der Bahnhof?|Where is the train station?|Wo ist die Toilette?|Where is the toilet?
+Someone tells you the way.|Geradeaus, dann links.|Straight ahead, then left.|Dann rechts.|Then right.
+You need help.|Können Sie mir helfen?|Can you help me?|Hilfe!|Help!
+You don't know.|Ich weiß nicht.|I don't know.|Keine Ahnung.|No idea.
+You raise a glass.|Prost!|Cheers!|Zum Wohl!|To your health!
+Someone starts to eat.|Guten Appetit!|Enjoy your meal!|Mahlzeit!|Enjoy your meal! (casual)
+It is someone's birthday.|Alles Gute zum Geburtstag!|Happy birthday!|Herzlichen Glückwunsch!|Congratulations!
+You'll see a friend later.|Bis später!|See you later!|Bis morgen!|See you tomorrow!
+It is Friday and you say goodbye.|Schönes Wochenende!|Have a nice weekend!|Schönen Tag noch!|Have a nice day!
+You say how old you are.|Ich bin zwanzig Jahre alt.|I am twenty years old.|Ich bin zwanzig.|I am twenty.
+You ask a friend how old they are.|Wie alt bist du?|How old are you?|Wie alt sind Sie?|How old are you? (formal)
+You need a moment.|Einen Moment, bitte.|One moment, please.|Moment mal!|Just a moment!
+You are hungry.|Ich habe Hunger.|I am hungry.|Ich habe Durst.|I am thirsty.
+You are tired.|Ich bin müde.|I am tired.|Ich bin krank.|I am ill.
+Someone suggests something you like.|Gute Idee!|Good idea!|Das ist toll!|That's great!
+You ask the time.|Wie spät ist es?|What time is it?|Wie viel Uhr ist es?|What time is it?
 """
 }
