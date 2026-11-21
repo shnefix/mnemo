@@ -5,6 +5,7 @@ import app.mnemo.di.AppGraph
 import app.mnemo.domain.graph.DeckGraph
 import app.mnemo.domain.model.NoteKind
 import app.mnemo.domain.model.Relation
+import app.mnemo.domain.model.ReviewMode
 import app.mnemo.platform.Prefs
 import kotlinx.coroutines.sync.withLock
 
@@ -21,7 +22,7 @@ object EnglishDeck {
     const val ROOT = "English (B1–B2)"
 
     /** Bump when the content changes; older installs are updated on the next launch. */
-    const val VERSION = 4
+    const val VERSION = 5
 
     data class Section(
         val name: String,
@@ -35,6 +36,22 @@ object EnglishDeck {
     val pictures = Section("4. Things to know", 3, "picture")
     val grammar = Section("5. Grammar", 2, "grammar")
     val numbers = Section("6. Numbers, time & money", 2, "numbers")
+
+    /** Spoken, in Speak mode: the phrases that keep a real conversation going. */
+    val talk = Section("7. Keep the conversation going", 3, "conversation")
+
+    /** Version in which [talk] was added: older installs get it on update. */
+    private const val TALK_SINCE = 5
+
+    /** The categories of [talk]: sub-deck name, label of its packs, content. */
+    private val talkCategories =
+        listOf(
+            Triple("1. Reactions", "Reactions", EnglishTalkContent.REACTIONS),
+            Triple("2. Follow-up questions", "Follow-ups", EnglishTalkContent.FOLLOW_UPS),
+            Triple("3. Polite & softening", "Polite", EnglishTalkContent.POLITE),
+            Triple("4. Buying time & fixing", "Time", EnglishTalkContent.BUYING_TIME),
+            Triple("5. Natural fillers", "Fillers", EnglishTalkContent.FILLERS),
+        )
 
     /** Version in which [numbers] was added: older installs get it on update. */
     private const val NUMBERS_SINCE = 4
@@ -159,6 +176,19 @@ object EnglishDeck {
         // Added in version 4: a new section, so it is created even when only updating.
         if (from < NUMBERS_SINCE) seed.alwaysCreate(numberCards())
         packs(numbers, "Numbers", numberCards(), NoteKind.Basic)
+        // Added in version 5: spoken practice, so its decks open in Speak mode.
+        if (from < TALK_SINCE) seed.alwaysCreate(talkCards())
+        talkCategories.forEach { (name, label, text) ->
+            seed.packs(
+                "${talk.name}::$name",
+                talk.newPerDay,
+                label,
+                talkCards(text),
+                NoteKind.Basic,
+                listOf("english", talk.tag),
+                mode = ReviewMode.Speak,
+            )
+        }
         val changed = seed.commit() + retired.size
         retired.forEach { graph.notes.delete(it.id) }
         // Packs the move left empty.
@@ -234,6 +264,19 @@ object EnglishDeck {
             Card(mapOf("Front" to "# $pic\n\n$question", "Back" to "**$name**\n\n$hint\n\n${quote(examples)}".trim()))
         }
     }
+
+    /** situation | what you say | another way | another way (all categories when no [text] is given) */
+    internal fun talkCards(text: String? = null): List<Card> =
+        (text?.let { listOf(it) } ?: talkCategories.map { it.third }).flatMap { content ->
+            rows(content).map { (situation, say, other1, other2) ->
+                Card(
+                    mapOf(
+                        "Front" to "$situation\n\n*What do you say?*",
+                        "Back" to "**$say**\n\nOther ways to say it:\n\n- $other1\n- $other2",
+                    ),
+                )
+            }
+        }
 
     /** written | how you say it | another way | three examples */
     internal fun numberCards(): List<Card> =

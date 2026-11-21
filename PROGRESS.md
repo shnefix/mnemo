@@ -47,6 +47,11 @@
 - **Numbers, time & money** (English deck v4, `EnglishNumbersContent.kt`): "6. Numbers, time &
   money" — 45 cards on how to say prices, times, dates, years, phone numbers, measurements and
   scores, each with three examples. Added to older installs on update.
+- **Keep the conversation going** (English deck v5, `EnglishTalkContent.kt`): "7. Keep the
+  conversation going" — 78 situation cards in Speak mode (the question is asked aloud, you answer
+  aloud): reactions, follow-up questions, polite & softening phrases, buying time & fixing what you
+  said, natural fillers. Each card has the model phrase and two other ways. Added to older installs
+  on update.
 - **Dictation cards**: a `[listen: …]` marker in a card's front is read aloud when the card
   appears (and with "Listen again") instead of being shown; such cards always get the type box.
   Speech uses the card's own deck language, so it also works from "All decks".

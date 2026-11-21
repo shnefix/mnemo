@@ -5,11 +5,13 @@ import app.mnemo.data.repo.NoteRepository
 import app.mnemo.data.seed.EnglishDeck
 import app.mnemo.data.seed.EnglishDeckContent
 import app.mnemo.data.seed.EnglishDeckExtras
+import app.mnemo.data.seed.EnglishTalkContent
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.cards.CardGenerator
 import app.mnemo.domain.graph.DeckGraph
 import app.mnemo.domain.model.NoteKind
 import app.mnemo.domain.model.Relation
+import app.mnemo.domain.model.ReviewMode
 import app.mnemo.platform.Clock
 import app.mnemo.platform.Prefs
 import kotlinx.coroutines.runBlocking
@@ -132,6 +134,62 @@ class EnglishDeckTest {
                     .id,
             )
             assertEquals(0, EnglishDeck.install(g, fresh = false, from = 4))
+        }
+
+    @Test
+    fun conversationSectionIsSpokenAndInstallsOnUpdate() =
+        runBlocking {
+            val texts =
+                listOf(
+                    EnglishTalkContent.REACTIONS,
+                    EnglishTalkContent.FOLLOW_UPS,
+                    EnglishTalkContent.POLITE,
+                    EnglishTalkContent.BUYING_TIME,
+                    EnglishTalkContent.FILLERS,
+                )
+            val rows = texts.flatMap { EnglishDeck.rows(it) }
+            assertTrue(rows.size >= 60)
+            rows.forEach { r ->
+                assertEquals(4, r.size, "bad row $r")
+                assertTrue(r.all { it.isNotBlank() }, "empty field in $r")
+            }
+            assertEquals(rows.size, rows.map { it[0] }.toSet().size, "duplicate situation")
+            val cards = EnglishDeck.talkCards()
+            assertEquals(rows.size, cards.size)
+            assertTrue(
+                cards.all { c ->
+                    c.fields
+                        .getValue("Back")
+                        .lines()
+                        .count { it.startsWith("- ") } == 2
+                },
+            )
+
+            val g = graph()
+            g.seed()
+            EnglishDeck.install(g)
+            val decks = g.decks.all()
+            val section = decks.first { it.name == EnglishDeck.talk.name }
+            // The whole section opens in Speak mode.
+            decks
+                .filter { d ->
+                    d.id in g.decks.subtreeIds(section.id)
+                }.forEach { assertEquals(ReviewMode.Speak, it.settings.mode, it.path) }
+            assertEquals(5, decks.count { it.parentId == section.id })
+            // An install from before this section existed (version 4) gets it on update.
+            g.decks.subtreeIds(section.id).forEach { d -> g.notes.byDeck(d).forEach { g.notes.delete(it.id) } }
+            val before = g.notes.countAll()
+            assertEquals(rows.size, EnglishDeck.install(g, fresh = false, from = 4))
+            assertEquals(before + rows.size, g.notes.countAll())
+            // Later, a card the user deleted stays deleted.
+            val pack = g.decks.all().first { it.name == "Reactions 01" }
+            g.notes.delete(
+                g.notes
+                    .byDeck(pack.id)
+                    .first()
+                    .id,
+            )
+            assertEquals(0, EnglishDeck.install(g, fresh = false, from = 5))
         }
 
     @Test
