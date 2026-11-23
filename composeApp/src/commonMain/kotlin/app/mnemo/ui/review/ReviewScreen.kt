@@ -1,7 +1,19 @@
 package app.mnemo.ui.review
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,6 +61,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -56,6 +69,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -69,6 +83,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -228,19 +243,38 @@ fun ReviewScreen(
                                     onSpokenMore = vm::addSpoken,
                                     modifier = Modifier.weight(1f),
                                 )
-                                Spacer(Modifier.height(14.dp))
-                                if (!state.revealed) {
-                                    ShowAnswerButton(if (state.typing) "Check answer" else "Show answer", onClick = vm::reveal)
-                                } else {
-                                    GradeBar(state = state, onGrade = vm::grade)
-                                    if (isMobilePlatform) {
-                                        Spacer(Modifier.height(10.dp))
-                                        Text(
-                                            "Or swipe the card: left for Again, right for Good",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MnemoColors.text2,
-                                            modifier = Modifier.align(Alignment.CenterHorizontally),
-                                        )
+                                // Type mode keeps a Check button (the card itself holds the text field);
+                                // everywhere else a tap on the card shows the answer.
+                                AnimatedVisibility(
+                                    visible = !state.revealed && state.typing,
+                                    enter = fadeIn(tween(200)) + expandVertically(tween(260)),
+                                    exit = fadeOut(tween(120)) + shrinkVertically(tween(200)),
+                                ) {
+                                    Column {
+                                        Spacer(Modifier.height(14.dp))
+                                        ShowAnswerButton("Check answer", onClick = vm::reveal)
+                                    }
+                                }
+                                // The grade buttons rise in under the card once the answer shows.
+                                AnimatedVisibility(
+                                    visible = state.revealed,
+                                    enter =
+                                        fadeIn(tween(220, delayMillis = 60)) +
+                                            expandVertically(spring(dampingRatio = 0.85f, stiffness = 500f), expandFrom = Alignment.Top),
+                                    exit = fadeOut(tween(120)) + shrinkVertically(tween(220), shrinkTowards = Alignment.Top),
+                                ) {
+                                    Column {
+                                        Spacer(Modifier.height(14.dp))
+                                        GradeBar(state = state, onGrade = vm::grade)
+                                        if (isMobilePlatform) {
+                                            Spacer(Modifier.height(10.dp))
+                                            Text(
+                                                "Or swipe the card: left for Again, right for Good",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MnemoColors.text2,
+                                                modifier = Modifier.align(Alignment.CenterHorizontally).then(rise(4)),
+                                            )
+                                        }
                                     }
                                 }
                                 if (!compact) {
@@ -467,11 +501,10 @@ private fun FocusCard(
     val scope = rememberCoroutineScope()
     val offsetX = remember { Animatable(0f) }
     val view = state.view ?: return
-    val rendered = state.rendered
-    val tapToReveal = !state.revealed && !state.typing && state.mode != ReviewMode.Speak
+    val tapToReveal = !state.revealed && !state.typing
     val pad = if (compact) 22.dp else 32.dp
 
-    BoxWithConstraints(
+    Column(
         modifier
             .fillMaxWidth()
             .offset { IntOffset(offsetX.value.roundToInt(), 0) }
@@ -502,97 +535,167 @@ private fun FocusCard(
             .background(MnemoColors.surface)
             .clickable(enabled = tapToReveal, role = Role.Button, onClick = onReveal),
     ) {
-        val viewport = maxHeight
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .heightIn(min = viewport)
-                .padding(horizontal = pad, vertical = if (compact) 20.dp else 28.dp),
-            verticalArrangement = if (state.revealed) Arrangement.Top else Arrangement.SpaceBetween,
-        ) {
-            CardMeta(state)
-            if (!state.revealed) {
-                // The question, centred; short ones big and in the display face.
-                val question = rendered?.question.orEmpty().replace("[...]", "\\_\\_\\_\\_\\_\\_")
-                val short = plainCardText(question).length <= 140
-                Column(
-                    Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    val big =
-                        MaterialTheme.typography.headlineLarge.copy(
-                            fontSize = if (compact) 28.sp else 32.sp,
-                            lineHeight = if (compact) 35.sp else 40.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 0.sp,
-                            textAlign = TextAlign.Center,
-                        )
-                    val simple = if (short) remember(question) { inlineMarkdown(question) } else null
-                    when {
-                        // Plain text with bold / italics: drawn here so every line is centred.
-                        simple != null -> Text(simple, style = big, color = MnemoColors.text, modifier = Modifier.fillMaxWidth())
-                        short -> CardText(question, style = big)
-                        else -> CardText(question, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 19.sp, lineHeight = 28.sp))
-                    }
-                    ListenButton(state, rendered?.listen)
-                    if (state.typing) {
-                        Spacer(Modifier.height(22.dp))
-                        MnemoTextField(
-                            value = state.typed,
-                            onValueChange = onTyped,
-                            placeholder = "Type your answer, then Enter",
-                            singleLine = true,
-                            onSubmit = onReveal,
-                        )
-                    }
-                    if (state.mode == ReviewMode.Speak && !state.typing) {
-                        Spacer(Modifier.height(22.dp))
-                        SpokenAnswer(state, onSpoken, onSpokenMore, onReveal)
-                    }
-                }
-                Text(
-                    when {
-                        !tapToReveal -> ""
-                        isMobilePlatform -> "Tap the card to see the answer"
-                        else -> "Click the card or press Space to see the answer"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MnemoColors.text2,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
-            } else {
-                Spacer(Modifier.height(16.dp))
-                // The question again, small: a reminder of what was asked. A cloze answer already
-                // is the whole sentence, so it doesn't need one.
-                if (view.noteKind != NoteKind.Cloze) {
-                    CardText(
-                        rendered?.question.orEmpty().replace("[...]", "\\_\\_\\_\\_"),
-                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, lineHeight = 23.sp),
-                        color = MnemoColors.text2,
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(MnemoColors.outline))
-                    Spacer(Modifier.height(18.dp))
-                } else {
-                    Spacer(Modifier.height(6.dp))
-                }
-                if (state.typing) {
-                    TypedFeedback(state)
-                    Spacer(Modifier.height(16.dp))
-                }
-                if (state.mode == ReviewMode.Speak && !state.typing) {
-                    SpokenAnswer(state, onSpoken, onSpokenMore, onReveal)
-                    if (state.spoken.isNotBlank()) Spacer(Modifier.height(16.dp))
-                }
-                AnswerText(rendered?.answer.orEmpty(), compact)
-                ListenButton(state, rendered?.listen)
-                if (view.tags.isNotEmpty()) {
-                    Spacer(Modifier.height(18.dp))
-                    Text(view.tags.joinToString("  ") { "#$it" }, style = MaterialTheme.typography.labelMedium, color = MnemoColors.text2)
-                }
+        // The card's kind stays put while its two sides change underneath.
+        Box(Modifier.padding(start = pad, end = pad, top = if (compact) 20.dp else 28.dp)) { CardMeta(state) }
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+            val viewport = maxHeight
+            AnimatedContent(
+                targetState = state,
+                contentKey = { it.view?.card?.id to it.revealed },
+                transitionSpec = {
+                    val sameCard = initialState.view?.card?.id == targetState.view?.card?.id
+                    if (sameCard) {
+                        // Showing the answer: the question lifts away and the answer settles in.
+                        (fadeIn(tween(220, delayMillis = 70)) + scaleIn(tween(360, easing = FastOutSlowInEasing), initialScale = 0.97f))
+                            .togetherWith(fadeOut(tween(130)) + slideOutVertically(tween(200)) { -it / 14 })
+                    } else {
+                        // The next card.
+                        (
+                            fadeIn(tween(260, delayMillis = 60)) +
+                                scaleIn(tween(340, delayMillis = 60, easing = FastOutSlowInEasing), initialScale = 0.94f)
+                        ).togetherWith(fadeOut(tween(110)))
+                    }.using(SizeTransform(clip = false))
+                },
+                label = "card face",
+            ) { s ->
+                CardFace(s, compact, viewport, onReveal, onTyped, onSpoken, onSpokenMore)
             }
         }
+    }
+}
+
+/** One side of the card: the question (centred) or the answer (with the question as a reminder). */
+@Composable
+private fun CardFace(
+    state: ReviewUiState,
+    compact: Boolean,
+    viewport: Dp,
+    onReveal: () -> Unit,
+    onTyped: (String) -> Unit,
+    onSpoken: (String) -> Unit,
+    onSpokenMore: (String) -> Unit,
+) {
+    val view = state.view ?: return
+    val rendered = state.rendered
+    val tapToReveal = !state.revealed && !state.typing
+    val pad = if (compact) 22.dp else 32.dp
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .heightIn(min = viewport)
+            .padding(start = pad, end = pad, top = 4.dp, bottom = if (compact) 20.dp else 28.dp),
+        verticalArrangement = if (state.revealed) Arrangement.Top else Arrangement.SpaceBetween,
+    ) {
+        if (!state.revealed) {
+            // Something at the top, so SpaceBetween centres the question between it and the hint.
+            Spacer(Modifier.height(1.dp))
+            // The question, centred; short ones big and in the display face.
+            val question = rendered?.question.orEmpty().replace("[...]", "\\_\\_\\_\\_\\_\\_")
+            val short = plainCardText(question).length <= 140
+            Column(
+                Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                val big =
+                    MaterialTheme.typography.headlineLarge.copy(
+                        fontSize = if (compact) 28.sp else 32.sp,
+                        lineHeight = if (compact) 35.sp else 40.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                val simple = if (short) remember(question) { inlineMarkdown(question) } else null
+                when {
+                    // Plain text with bold / italics: drawn here so every line is centred.
+                    simple != null -> Text(simple, style = big, color = MnemoColors.text, modifier = Modifier.fillMaxWidth())
+                    short -> CardText(question, style = big)
+                    else -> CardText(question, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 19.sp, lineHeight = 28.sp))
+                }
+                ListenButton(state, rendered?.listen)
+                if (state.typing) {
+                    Spacer(Modifier.height(22.dp))
+                    MnemoTextField(
+                        value = state.typed,
+                        onValueChange = onTyped,
+                        placeholder = "Type your answer, then Enter",
+                        singleLine = true,
+                        onSubmit = onReveal,
+                    )
+                }
+                if (state.mode == ReviewMode.Speak && !state.typing) {
+                    Spacer(Modifier.height(22.dp))
+                    SpokenAnswer(state, onSpoken, onSpokenMore, onReveal)
+                }
+            }
+            Text(
+                when {
+                    !tapToReveal -> ""
+                    isMobilePlatform -> "Tap the card to see the answer"
+                    else -> "Click the card or press Space to see the answer"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = MnemoColors.text2,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+        } else {
+            Spacer(Modifier.height(16.dp))
+            // The question again, small: a reminder of what was asked. A cloze answer already
+            // is the whole sentence, so it doesn't need one.
+            if (view.noteKind != NoteKind.Cloze) {
+                CardText(
+                    rendered?.question.orEmpty().replace("[...]", "\\_\\_\\_\\_"),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, lineHeight = 23.sp),
+                    color = MnemoColors.text2,
+                    modifier = rise(0),
+                )
+                Spacer(Modifier.height(16.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .then(rise(0))
+                        .background(MnemoColors.outline),
+                )
+                Spacer(Modifier.height(18.dp))
+            } else {
+                Spacer(Modifier.height(6.dp))
+            }
+            if (state.typing) {
+                Box(rise(1)) { TypedFeedback(state) }
+                Spacer(Modifier.height(16.dp))
+            }
+            if (state.mode == ReviewMode.Speak && !state.typing) {
+                SpokenAnswer(state, onSpoken, onSpokenMore, onReveal)
+                if (state.spoken.isNotBlank()) Spacer(Modifier.height(16.dp))
+            }
+            AnswerText(rendered?.answer.orEmpty(), compact)
+            Column(rise(3)) { ListenButton(state, rendered?.listen) }
+            if (view.tags.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    view.tags.joinToString("  ") { "#$it" },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MnemoColors.text2,
+                    modifier = rise(3),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Fades a piece in while it rises a little, [index] steps after the others, so the answer
+ * arrives top to bottom instead of all at once.
+ */
+@Composable
+private fun rise(index: Int): Modifier {
+    val p = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { p.animateTo(1f, tween(380, delayMillis = 90 + index * 70, easing = FastOutSlowInEasing)) }
+    val dy = with(LocalDensity.current) { 14.dp.toPx() }
+    return Modifier.graphicsLayer {
+        alpha = p.value
+        translationY = (1f - p.value) * dy
     }
 }
 
@@ -656,6 +759,7 @@ private fun AnswerText(
     if (headline) {
         CardText(
             firstLine,
+            modifier = rise(1),
             style =
                 MaterialTheme.typography.displaySmall.copy(
                     fontSize = if (compact) 40.sp else 46.sp,
@@ -665,10 +769,10 @@ private fun AnswerText(
         )
         if (rest.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
-            CardText(rest, style = body)
+            CardText(rest, style = body, modifier = rise(2))
         }
     } else {
-        CardText(trimmed, style = body)
+        CardText(trimmed, style = body, modifier = rise(1))
     }
 }
 
@@ -681,13 +785,14 @@ private fun CardText(
     text: String,
     style: TextStyle,
     color: Color = MnemoColors.text,
+    modifier: Modifier = Modifier,
 ) {
     val t = MaterialTheme.typography
     MaterialTheme(
         colorScheme = MaterialTheme.colorScheme,
         typography = t.copy(bodyLarge = style, bodyMedium = style, bodySmall = style.copy(fontSize = style.fontSize * 0.85f)),
     ) {
-        MarkdownText(text, color = color, modifier = Modifier.fillMaxWidth())
+        MarkdownText(text, color = color, modifier = modifier.fillMaxWidth())
     }
 }
 
@@ -885,6 +990,7 @@ private fun GradeBar(
                 Column(
                     Modifier
                         .weight(1f)
+                        .then(rise(r.ordinal))
                         .height(if (isMobilePlatform) 68.dp else 80.dp)
                         .clip(RoundedCornerShape(18.dp))
                         .background(bg)

@@ -204,9 +204,9 @@ class OnDeviceDesignAuditTest {
 
             // Review from the deck page: question, answer, then end the session.
             rule.onNode(hasText("Study $deck") and hasRole(Role.Button)).performClick()
-            rule.waitUntil(15_000) { exists(hasText("Show answer")) }
+            rule.waitUntil(15_000) { exists(hasText("Tap the card to see the answer")) }
             lint("13-review-question")
-            rule.onNodeWithText("Show answer").performClick()
+            rule.onNodeWithText("Tap the card to see the answer").performClick() // the whole card is the button
             rule.waitUntil(15_000) { exists(hasText("Good")) }
             lint("14-review-answer")
             rule.onNodeWithContentDescription("End session").performClick()

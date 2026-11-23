@@ -104,7 +104,7 @@ class OnDeviceUiTest {
 
         // 4. Review: reveal, grade Good, session ends.
         waitFor(hasText("Capital of France?"))
-        rule.onNodeWithText("Show answer").performClick()
+        rule.onNodeWithText("Tap the card to see the answer").performClick() // the whole card is the button
         waitFor(hasText("Paris"))
         rule.onNode(hasText("Good") and hasRole(Role.Button)).performClick()
         rule.waitUntil(15_000) { exists(hasText("Session done")) || exists(hasText("Capital of France?")) }

@@ -190,10 +190,11 @@ class ScreenshotTest {
             if (tapAt != null) {
                 scene.sendPointerEvent(PointerEventType.Press, tapAt)
                 scene.sendPointerEvent(PointerEventType.Release, tapAt)
-                repeat(8) {
+                // A second of animation time, in 50 ms frames.
+                repeat(20) {
                     scene.render(t)
-                    Thread.sleep(120)
-                    t += 16_000_000L
+                    Thread.sleep(60)
+                    t += 50_000_000L
                 }
             }
             val image = scene.render(t)
