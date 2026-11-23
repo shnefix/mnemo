@@ -247,8 +247,8 @@ fun ReviewScreen(
                                 // everywhere else a tap on the card shows the answer.
                                 AnimatedVisibility(
                                     visible = !state.revealed && state.typing,
-                                    enter = fadeIn(tween(200)) + expandVertically(tween(260)),
-                                    exit = fadeOut(tween(120)) + shrinkVertically(tween(200)),
+                                    enter = fadeIn(tween(150)) + expandVertically(tween(190)),
+                                    exit = fadeOut(tween(90)) + shrinkVertically(tween(150)),
                                 ) {
                                     Column {
                                         Spacer(Modifier.height(14.dp))
@@ -259,9 +259,9 @@ fun ReviewScreen(
                                 AnimatedVisibility(
                                     visible = state.revealed,
                                     enter =
-                                        fadeIn(tween(220, delayMillis = 60)) +
-                                            expandVertically(spring(dampingRatio = 0.85f, stiffness = 500f), expandFrom = Alignment.Top),
-                                    exit = fadeOut(tween(120)) + shrinkVertically(tween(220), shrinkTowards = Alignment.Top),
+                                        fadeIn(tween(150, delayMillis = 20)) +
+                                            expandVertically(spring(dampingRatio = 0.9f, stiffness = 900f), expandFrom = Alignment.Top),
+                                    exit = fadeOut(tween(90)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Top),
                                 ) {
                                     Column {
                                         Spacer(Modifier.height(14.dp))
@@ -546,14 +546,14 @@ private fun FocusCard(
                     val sameCard = initialState.view?.card?.id == targetState.view?.card?.id
                     if (sameCard) {
                         // Showing the answer: the question lifts away and the answer settles in.
-                        (fadeIn(tween(220, delayMillis = 70)) + scaleIn(tween(360, easing = FastOutSlowInEasing), initialScale = 0.97f))
-                            .togetherWith(fadeOut(tween(130)) + slideOutVertically(tween(200)) { -it / 14 })
+                        (fadeIn(tween(150, delayMillis = 30)) + scaleIn(tween(240, easing = FastOutSlowInEasing), initialScale = 0.97f))
+                            .togetherWith(fadeOut(tween(90)) + slideOutVertically(tween(140)) { -it / 14 })
                     } else {
                         // The next card.
                         (
-                            fadeIn(tween(260, delayMillis = 60)) +
-                                scaleIn(tween(340, delayMillis = 60, easing = FastOutSlowInEasing), initialScale = 0.94f)
-                        ).togetherWith(fadeOut(tween(110)))
+                            fadeIn(tween(170, delayMillis = 30)) +
+                                scaleIn(tween(220, delayMillis = 30, easing = FastOutSlowInEasing), initialScale = 0.95f)
+                        ).togetherWith(fadeOut(tween(80)))
                     }.using(SizeTransform(clip = false))
                 },
                 label = "card face",
@@ -691,7 +691,7 @@ private fun CardFace(
 @Composable
 private fun rise(index: Int): Modifier {
     val p = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { p.animateTo(1f, tween(380, delayMillis = 90 + index * 70, easing = FastOutSlowInEasing)) }
+    LaunchedEffect(Unit) { p.animateTo(1f, tween(260, delayMillis = 40 + index * 40, easing = FastOutSlowInEasing)) }
     val dy = with(LocalDensity.current) { 14.dp.toPx() }
     return Modifier.graphicsLayer {
         alpha = p.value
