@@ -97,10 +97,11 @@ internal class SeedInstaller(
         tags: List<String>,
         packSize: Int = EnglishDeck.PACK_SIZE,
         mode: ReviewMode = ReviewMode.Classic,
+        firstNumber: Int = 1,
     ) {
         deck(section, newPerDay, mode)
         cards.chunked(packSize).forEachIndexed { i, pack ->
-            val name = "$label ${(i + 1).toString().padStart(2, '0')}"
+            val name = "$label ${(i + firstNumber).toString().padStart(2, '0')}"
             fill(deck("$section::$name", packSize, mode), kind, pack, tags)
         }
     }

@@ -1,6 +1,7 @@
 package app.mnemo
 
 import app.mnemo.data.db.DriverFactory
+import app.mnemo.data.io.DeckTrash
 import app.mnemo.data.repo.NoteRepository
 import app.mnemo.data.seed.EnglishDeck
 import app.mnemo.data.seed.EnglishDeckContent
@@ -97,43 +98,34 @@ class EnglishDeckTest {
         assertEquals(emptySet(), EnglishDeck.topics.keys - used)
     }
 
+    /** Version 6 took out "Numbers, time & money" and "Things 01–06": an update trashes them, a new install never has them. */
     @Test
-    fun numberCardsHaveThreeExamplesAndInstallOnUpdate() =
+    fun takenOutSectionsAreTrashedOnUpdateAndNeverInstalled() =
         runBlocking {
-            val rows = EnglishDeck.rows(app.mnemo.data.seed.EnglishNumbersContent.NUMBERS)
-            assertTrue(rows.size >= 40)
-            rows.forEach { r ->
-                assertEquals(6, r.size, "bad row $r")
-                assertTrue(r.all { it.isNotBlank() }, "empty field in $r")
-            }
-            assertEquals(rows.size, rows.map { it[0] }.toSet().size, "duplicate written form")
-            assertTrue(
-                EnglishDeck.numberCards().all { c ->
-                    c.fields
-                        .getValue("Back")
-                        .lines()
-                        .count { it.startsWith("> ") } == 3
-                },
-            )
-            // An install from before this section existed gets it when it updates (version 3 → 4).
             val g = graph()
             g.seed()
             EnglishDeck.install(g)
-            val section = g.decks.all().first { it.name == EnglishDeck.numbers.name }
-            g.decks.subtreeIds(section.id).forEach { d -> g.notes.byDeck(d).forEach { g.notes.delete(it.id) } }
+            val fresh = g.decks.all()
+            assertTrue(fresh.none { it.name == "6. Numbers, time & money" || it.name == "Numbers 01" })
+            assertTrue(fresh.none { it.name in (1..6).map { n -> "Things 0$n" } }, "Things start at 07")
+            assertTrue(fresh.any { it.name == "Things 07" })
+            // What a version 5 install had: the numbers section and the first Things pack, with cards in them.
+            val basic = g.notes.noteTypeOf(NoteKind.Basic)
+            val numbers = g.decks.createByPath("${EnglishDeck.ROOT}::6. Numbers, time & money::Numbers 01")
+            val things = g.decks.createByPath("${EnglishDeck.ROOT}::${EnglishDeck.pictures.name}::Things 01")
+            g.notes.create(numbers, basic, mapOf("Front" to "£4.50", "Back" to "four fifty"), listOf("english", "numbers"))
+            g.notes.create(things, basic, mapOf("Front" to "# 🪠", "Back" to "a plunger"), listOf("english", "picture"))
             val before = g.notes.countAll()
-            val added = EnglishDeck.install(g, fresh = false, from = 3)
-            assertEquals(rows.size, added)
-            assertEquals(before + rows.size, g.notes.countAll())
-            // A card the user deleted later is not brought back once the section exists in their version.
-            val pack = g.decks.all().first { it.name == "Numbers 01" }
-            g.notes.delete(
-                g.notes
-                    .byDeck(pack.id)
-                    .first()
-                    .id,
-            )
-            assertEquals(0, EnglishDeck.install(g, fresh = false, from = 4))
+            EnglishDeck.install(g, fresh = false, from = 5)
+            val after = g.decks.all()
+            assertTrue(after.none { it.name == "6. Numbers, time & money" || it.name == "Numbers 01" || it.name == "Things 01" })
+            assertTrue(after.any { it.name == "Things 07" }, "the other packs stay")
+            assertEquals(before - 2, g.notes.countAll())
+            // Deleted through the trash, so it can be brought back.
+            val trash = DeckTrash.list(g.clock.now())
+            assertTrue(trash.any { it.deckPath.endsWith("6. Numbers, time & money") } && trash.any { it.deckPath.endsWith("Things 01") })
+            // A version 6 install does not do it again.
+            assertEquals(0, EnglishDeck.install(g, fresh = false, from = 6))
         }
 
     @Test
@@ -332,7 +324,7 @@ class EnglishDeckTest {
                 .filter { it.id !in listOf(rare1, rare2, mine) }
                 .forEach { g.notes.markUnedited(listOf(it.id)) }
             val before = g.notes.countAll()
-            assertTrue(fronts(mess).size > 100)
+            assertTrue(fronts(mess).size > 30)
 
             EnglishDeck.install(g, fresh = false)
 

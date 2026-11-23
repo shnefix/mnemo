@@ -34,11 +34,9 @@ class EnglishB2DeckTest {
     fun everyRowIsWellFormed() {
         val sets =
             mapOf(
-                "collocations" to Triple(EnglishB2Content.COLLOCATIONS, 6, 80),
                 "phrasal verbs" to Triple(EnglishB2Content.PHRASAL_VERBS, 6, 130),
                 "word families" to Triple(EnglishB2Content.WORD_FAMILIES, 5, 45),
                 "linking" to Triple(EnglishB2Content.LINKING, 6, 35),
-                "rewriting" to Triple(EnglishB2Content.REWRITING, 5, 45),
                 "listening" to Triple(EnglishB2Content.LISTENING, 1, 50),
             )
         sets.forEach { (name, t) ->
@@ -51,9 +49,6 @@ class EnglishB2DeckTest {
             }
             val keys = rows.map { if (name == "phrasal verbs") it[1].lowercase() else it[0].lowercase() }
             assertEquals(keys.size, keys.toSet().size, "$name has duplicates: ${keys.groupBy { it }.filter { it.value.size > 1 }.keys}")
-        }
-        EnglishDeck.rows(EnglishB2Content.COLLOCATIONS).forEach { r ->
-            assertEquals(1, gap.findAll(r[0]).count(), "one gap in ${r[0]}")
         }
         EnglishDeck.rows(EnglishB2Content.WORD_FAMILIES).forEach { r ->
             r.drop(2).forEach { assertEquals(1, gap.findAll(it).count(), "one gap in $it") }
@@ -70,26 +65,13 @@ class EnglishB2DeckTest {
         assertEquals(emptyList(), rows.map { it[1].lowercase() }.filter { it in old })
     }
 
-    /** Key word transformations: 2–5 words (contractions count as two) and the key word unchanged. */
-    @Test
-    fun rewritingFollowsTheExamRules() {
-        EnglishDeck.rows(EnglishB2Content.REWRITING).forEach { (original, key, gapped, answer) ->
-            assertEquals(1, Regex("___").findAll(gapped).count(), "one gap in $gapped")
-            assertTrue(key == key.uppercase(), "key word in capitals: $key")
-            val words = answer.split(" ").filter { it.isNotBlank() }
-            val count = words.size + words.count { "'" in it }
-            assertTrue(count in 2..5, "\"$answer\" is $count words ($original)")
-            assertTrue(words.any { it.lowercase().startsWith(key.lowercase()) }, "\"$answer\" must use $key")
-        }
-    }
-
     @Test
     fun installsEverySection() =
         runBlocking {
             val g = graph()
             g.seed()
             val added = EnglishB2Deck.install(g)
-            assertTrue(added > 500, "only $added notes")
+            assertTrue(added > 250, "only $added notes")
             val decks = g.decks.all()
             val root = decks.first { it.name == EnglishB2Deck.ROOT && it.parentId == null }
             EnglishB2Deck.sections.forEach { s -> assertTrue(decks.any { it.name == s.name && it.parentId == root.id }, s.name) }
@@ -102,17 +84,31 @@ class EnglishB2DeckTest {
             assertEquals(0, EnglishB2Deck.install(g))
         }
 
+    /** Version 2 took out "Collocations" and "Say it another way": an update trashes them, a new install never has them. */
+    @Test
+    fun takenOutSectionsAreTrashedOnUpdate() =
+        runBlocking {
+            val g = graph()
+            g.seed()
+            EnglishB2Deck.install(g)
+            assertTrue(g.decks.all().none { it.name == "2. Collocations" || it.name == "6. Say it another way" })
+            val basic = g.notes.noteTypeOf(NoteKind.Basic)
+            listOf("2. Collocations::Collocations 01", "6. Say it another way::Rewrite 01").forEach { path ->
+                val deck = g.decks.createByPath("${EnglishB2Deck.ROOT}::$path")
+                g.notes.create(deck, basic, mapOf("Front" to "q", "Back" to "a"), listOf("english", "b2"))
+            }
+            val before = g.notes.countAll()
+            EnglishB2Deck.install(g, fresh = false, from = 1)
+            assertEquals(before - 2, g.notes.countAll())
+            assertTrue(g.decks.all().none { it.name.startsWith("Collocations") || it.name.startsWith("Rewrite") })
+            assertTrue(g.decks.all().any { it.name == "Dictation 01" })
+        }
+
     @Test
     fun cardsRenderAsIntended() =
         runBlocking {
             val g = graph()
             g.seed()
-            val basic = g.notes.noteTypeOf(NoteKind.Basic)
-            val col = CardGenerator.render(basic, EnglishB2Deck.collocationCards().first().fields, 0)
-            assertTrue("…… a decision" in col.question && "[" !in col.question, col.question)
-            assertTrue("**make** a decision" in col.answer && "~~do a decision~~" in col.answer, col.answer)
-            assertEquals(3, col.answer.lines().count { it.startsWith("> ") })
-
             val type = g.notes.noteTypeOf(NoteKind.TypeAnswer)
             val dictation = EnglishB2Deck.listeningCards().first()
             val heard = CardGenerator.render(type, dictation.fields, 0)
@@ -125,10 +121,6 @@ class EnglishB2DeckTest {
             assertEquals("decision", family.expected)
             assertTrue("(DECIDE)" in family.question && "decision" !in family.question, family.question)
             assertNull(family.listen)
-
-            val rewrite = CardGenerator.render(basic, EnglishB2Deck.rewritingCards().first().fields, 0)
-            assertTrue("**LAST**" in rewrite.question && "The …… him was years ago." in rewrite.question, rewrite.question)
-            assertTrue("The **last time I saw** him was years ago." in rewrite.answer, rewrite.answer)
         }
 
     /** The new deck joins the graph, and linking-word cards join the grammar topic "Linking words". */
@@ -143,7 +135,7 @@ class EnglishB2DeckTest {
             DeckGraph.sync(g)
             EnglishDeck.syncGraph(g)
             val concepts = g.concepts.all().associateBy { it.name }
-            listOf(EnglishB2Deck.ROOT, "2. Collocations", "3. Phrasal verbs by topic").forEach { assertNotNull(concepts[it], it) }
+            listOf(EnglishB2Deck.ROOT, "3. Phrasal verbs by topic").forEach { assertNotNull(concepts[it], it) }
             val linkingCards = g.concepts.allLinks().getValue(concepts.getValue("Linking words").id)
             val b2Linking = EnglishDeck.rows(EnglishB2Content.LINKING).size
             assertTrue(linkingCards.size >= b2Linking, "${linkingCards.size} cards on Linking words")

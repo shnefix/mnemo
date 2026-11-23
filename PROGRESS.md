@@ -30,10 +30,11 @@
   unless the user edited them.
 - **English B2 practice deck** (`data/seed/EnglishB2Deck.kt`, content in `EnglishB2Content.kt`):
   a second built-in deck with its own daily mix (pref `seed.english.b2`): My mistakes (empty, first
-  in the mix), 84 collocations (gap + the usual wrong word), 135 phrasal verbs in 8 topic sub-decks
+  in the mix), 135 phrasal verbs in 8 topic sub-decks
   (about 150 with the B1–B2 deck, none repeated), 53 word families as word-formation clozes, 39
-  linking words (joined to the grammar topic "Linking words"), 51 key word transformations and 60
-  dictation sentences. Both English decks install through `SeedInstaller`.
+  linking words (joined to the grammar topic "Linking words") and 60
+  dictation sentences. Version 2 took out Collocations and Say it another way (older installs trash
+  them on update, kept 30 days in the deck trash). Both English decks install through `SeedInstaller`.
 - **Things to know** (English deck v3): the picture section is "4. Things to know" — the useful
   things and actions only (the rarely needed ones were removed, new everyday ones added). An update
   renames the old section, moves cards to their packs and deletes seed cards that were dropped
@@ -44,9 +45,9 @@
   1–10; "2. What to say" has 49 first phrases for real situations; "3. Type it (articles)" is a
   Type-mode drill where you type der/die/das for each noun (the answer is only the article, so a
   wrong one is never "close"). Every card has a simple example. Version 1 installs are moved over.
-- **Numbers, time & money** (English deck v4, `EnglishNumbersContent.kt`): "6. Numbers, time &
-  money" — 45 cards on how to say prices, times, dates, years, phone numbers, measurements and
-  scores, each with three examples. Added to older installs on update.
+- **Taken out** (English deck v6): "Numbers, time & money" and the first six "Things" packs
+  (Things 01–06; the rest keep their numbers, starting at 07). Older installs move them to the deck
+  trash on update (`EnglishDeck.removeTakenOut`), new installs never get them.
 - **Keep the conversation going** (English deck v5, `EnglishTalkContent.kt`): "7. Keep the
   conversation going" — 78 situation cards in Speak mode (the question is asked aloud, you answer
   aloud): reactions, follow-up questions, polite & softening phrases, buying time & fixing what you

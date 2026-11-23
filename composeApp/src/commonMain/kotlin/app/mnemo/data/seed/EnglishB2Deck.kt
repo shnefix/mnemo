@@ -1,5 +1,6 @@
 package app.mnemo.data.seed
 
+import app.mnemo.data.io.DeckTrash
 import app.mnemo.data.seed.SeedInstaller.Card
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.model.NoteKind
@@ -8,8 +9,7 @@ import app.mnemo.platform.Prefs
 
 /**
  * The built-in "English B2 practice" deck, for getting from B1 to a confident B2: your own
- * mistakes, collocations, phrasal verbs by topic, word families, linking words, "say it another
- * way" (key word transformations) and dictation. It sits next to [EnglishDeck] with its own
+ * mistakes, phrasal verbs by topic, word families, linking words and dictation. It sits next to [EnglishDeck] with its own
  * daily mix, so its sections are not crowded out by the B1–B2 deck's.
  *
  * Versioned like [EnglishDeck]: a newer app updates installed cards the user has not edited.
@@ -18,7 +18,7 @@ object EnglishB2Deck {
     const val ROOT = "English B2 practice"
 
     /** Bump when the content changes; older installs are updated on the next launch. */
-    const val VERSION = 1
+    const val VERSION = 2
 
     data class Section(
         val name: String,
@@ -29,16 +29,18 @@ object EnglishB2Deck {
     // "My mistakes" comes first: the daily mix takes sub-decks in name order, and your own
     // mistakes are the most valuable cards you'll ever have.
     val mistakes = Section("1. My mistakes", 5, "my-mistake")
-    val collocations = Section("2. Collocations", 3, "collocation")
     val phrasalVerbs = Section("3. Phrasal verbs by topic", 3, "phrasal-verb")
     val wordFamilies = Section("4. Word families", 2, "word-family")
 
     /** Tagged "linking" so the cards join the grammar deck's "Linking words" topic on the graph. */
     val linking = Section("5. Linking words", 2, "linking")
-    val rewriting = Section("6. Say it another way", 2, "rewriting")
     val listening = Section("7. Listening", 2, "listening")
 
-    val sections = listOf(mistakes, collocations, phrasalVerbs, wordFamilies, linking, rewriting, listening)
+    val sections = listOf(mistakes, phrasalVerbs, wordFamilies, linking, listening)
+
+    /** Version 2 took out "2. Collocations" and "6. Say it another way"; older installs trash them on update. */
+    private const val REMOVED_SINCE = 2
+    private val removed = listOf("2. Collocations", "6. Say it another way")
 
     /** Phrasal-verb topic codes in the content → sub-deck names. */
     val phrasalTopics =
@@ -58,13 +60,14 @@ object EnglishB2Deck {
         val installed = Prefs.get(Prefs.ENGLISH_B2_DECK)?.toIntOrNull() ?: 0
         if (installed >= VERSION) return
         val rootExists = graph.decks.all().any { it.name == ROOT && it.parentId == null }
-        if (installed == 0 || rootExists) install(graph, fresh = installed == 0)
+        if (installed == 0 || rootExists) install(graph, fresh = installed == 0, from = installed)
         Prefs.set(Prefs.ENGLISH_B2_DECK, VERSION.toString())
     }
 
     suspend fun install(
         graph: AppGraph,
         fresh: Boolean = true,
+        from: Int = 0,
     ): Int {
         val seed = SeedInstaller(graph, ROOT, fresh)
         seed.deck("", newPerDay = 15)
@@ -73,7 +76,6 @@ object EnglishB2Deck {
 
         // Empty on purpose: add the mistakes you make when you write or speak.
         seed.deck(mistakes.name, mistakes.newPerDay)
-        seed.packs(collocations.name, collocations.newPerDay, "Collocations", collocationCards(), NoteKind.Basic, tags(collocations))
         seed.deck(phrasalVerbs.name, phrasalVerbs.newPerDay)
         phrasalVerbCards().forEach { (topic, cards) ->
             seed.fill(seed.deck("${phrasalVerbs.name}::${phrasalTopics.getValue(topic)}", 10), NoteKind.Basic, cards, tags(phrasalVerbs))
@@ -89,7 +91,6 @@ object EnglishB2Deck {
             packSize = 9,
         )
         seed.packs(linking.name, linking.newPerDay, "Linking", linkingCards(), NoteKind.Basic, tags(linking))
-        seed.packs(rewriting.name, rewriting.newPerDay, "Rewrite", rewritingCards(), NoteKind.Basic, tags(rewriting))
         seed.packs(
             listening.name,
             listening.newPerDay,
@@ -99,29 +100,16 @@ object EnglishB2Deck {
             tags(listening),
             mode = ReviewMode.Type,
         )
-        return seed.commit()
+        val changed = seed.commit()
+        if (from in 1 until REMOVED_SINCE) {
+            val all = graph.decks.all()
+            val root = all.firstOrNull { it.name == ROOT && it.parentId == null }
+            all.filter { d -> root != null && d.parentId == root.id && d.name in removed }.forEach { DeckTrash.delete(graph, it.id) }
+        }
+        return changed
     }
 
-    /** A gap to fill; not underscores, which Markdown reads as emphasis. */
-    private const val BLANK = "……"
-
     private val gap = Regex("""\[([^\]]+)]""")
-
-    /** `[make] a decision` → front "…… a decision", back "**make** a decision". */
-    internal fun collocationCards(): List<Card> =
-        EnglishDeck.rows(EnglishB2Content.COLLOCATIONS).map { r ->
-            val (phrase, meaning, wrong) = r
-            val examples = r.drop(3)
-            val front = phrase.replace(gap, BLANK)
-            val bold = phrase.replace(gap) { "**${it.groupValues[1]}**" }
-            val not = if (wrong == "-") "" else "\n\nNot: ~~${phrase.replace(gap, wrong)}~~"
-            Card(
-                mapOf(
-                    "Front" to "**$front**\n\n*$meaning*\n\nWhich word goes in the gap?",
-                    "Back" to "$bold$not\n\n${EnglishDeck.quote(examples)}",
-                ),
-            )
-        }
 
     /** Phrasal verbs grouped by topic code, in [phrasalTopics] order. */
     internal fun phrasalVerbCards(): List<Pair<String, List<Card>>> {
@@ -161,19 +149,6 @@ object EnglishB2Deck {
                 mapOf(
                     "Front" to "**$word**\n\nWhat is it for, and how do you use it?",
                     "Back" to "$use\n\n*$how*\n\n${EnglishDeck.quote(r.drop(3))}",
-                ),
-            )
-        }
-
-    /** Key word transformations: same meaning, 2–5 words including the word in capitals. */
-    internal fun rewritingCards(): List<Card> =
-        EnglishDeck.rows(EnglishB2Content.REWRITING).map { (original, key, gapped, answer, tip) ->
-            Card(
-                mapOf(
-                    "Front" to
-                        "$original\n\nSay it another way with **$key** (2–5 words, don't change $key):\n\n" +
-                        gapped.replace("___", BLANK),
-                    "Back" to "${gapped.replace("___", "**$answer**")}\n\n*$tip*",
                 ),
             )
         }

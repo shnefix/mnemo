@@ -1,5 +1,6 @@
 package app.mnemo.data.seed
 
+import app.mnemo.data.io.DeckTrash
 import app.mnemo.data.seed.SeedInstaller.Card
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.graph.DeckGraph
@@ -22,7 +23,7 @@ object EnglishDeck {
     const val ROOT = "English (B1–B2)"
 
     /** Bump when the content changes; older installs are updated on the next launch. */
-    const val VERSION = 5
+    const val VERSION = 6
 
     data class Section(
         val name: String,
@@ -35,7 +36,6 @@ object EnglishDeck {
     val situations = Section("3. What to say", 3, "situation")
     val pictures = Section("4. Things to know", 3, "picture")
     val grammar = Section("5. Grammar", 2, "grammar")
-    val numbers = Section("6. Numbers, time & money", 2, "numbers")
 
     /** Spoken, in Speak mode: the phrases that keep a real conversation going. */
     val talk = Section("7. Keep the conversation going", 3, "conversation")
@@ -53,8 +53,12 @@ object EnglishDeck {
             Triple("5. Natural fillers", "Fillers", EnglishTalkContent.FILLERS),
         )
 
-    /** Version in which [numbers] was added: older installs get it on update. */
-    private const val NUMBERS_SINCE = 4
+    /** Version 6 took out "Numbers, time & money" and the first six "Things" packs. */
+    private const val REMOVED_SINCE = 6
+    private const val REMOVED_NUMBERS = "6. Numbers, time & money"
+
+    /** The "Things" packs that were taken out (01–06): the cards are gone, so numbering starts at 07. */
+    private const val REMOVED_THINGS_PACKS = 6
 
     /** What [pictures] was called before it was cut down to the useful things (version 2). */
     private const val OLD_PICTURES = "4. Name it (pictures)"
@@ -163,7 +167,15 @@ object EnglishDeck {
             seed.alwaysCreate(thingCards(onlyNew = true) + actionCards(onlyNew = true))
         }
         if (fresh || old != null || sectionOf(pictures.name) != null) {
-            packs(pictures, "Things", things, NoteKind.Basic)
+            seed.packs(
+                pictures.name,
+                pictures.newPerDay,
+                "Things",
+                things,
+                NoteKind.Basic,
+                listOf("english", pictures.tag),
+                firstNumber = REMOVED_THINGS_PACKS + 1,
+            )
             packs(pictures, "Actions", actions, NoteKind.Basic)
         }
         // Seed cards that are no longer in the deck (the rare ones), if you never edited them.
@@ -173,9 +185,6 @@ object EnglishDeck {
                 n.fields["Front"] !in kept && n.updatedAt == n.createdAt && n.tags == listOf("english", pictures.tag)
             }
         packs(grammar, "Grammar", grammarCards(), NoteKind.Cloze)
-        // Added in version 4: a new section, so it is created even when only updating.
-        if (from < NUMBERS_SINCE) seed.alwaysCreate(numberCards())
-        packs(numbers, "Numbers", numberCards(), NoteKind.Basic)
         // Added in version 5: spoken practice, so its decks open in Speak mode.
         if (from < TALK_SINCE) seed.alwaysCreate(talkCards())
         talkCategories.forEach { (name, label, text) ->
@@ -198,7 +207,21 @@ object EnglishDeck {
             val isPack = deck.parentId != null && deck.name.matches(PACK_NAME)
             if (isPack && all.none { it.parentId == id } && graph.notes.countByDeck(id) == 0L) graph.decks.delete(id)
         }
+        if (from in 1 until REMOVED_SINCE) removeTakenOut(graph)
         return changed
+    }
+
+    /** Moves "Numbers, time & money" and "Things 01–06" to the trash (kept 30 days) on installs that have them. */
+    private suspend fun removeTakenOut(graph: AppGraph) {
+        val all = graph.decks.all()
+        val root = all.firstOrNull { it.name == ROOT && it.parentId == null } ?: return
+        val sections = all.filter { it.parentId == root.id }
+        val things = sections.firstOrNull { it.name == pictures.name }
+        val gone = (1..REMOVED_THINGS_PACKS).map { "Things " + it.toString().padStart(2, '0') }.toSet()
+        val doomed =
+            sections.filter { it.name == REMOVED_NUMBERS } +
+                all.filter { things != null && it.parentId == things.id && it.name in gone }
+        doomed.forEach { DeckTrash.delete(graph, it.id) }
     }
 
     private val PACK_NAME = Regex(".* \\d\\d")
@@ -240,7 +263,8 @@ object EnglishDeck {
     /** The pictures of things worth knowing; [onlyNew] = just those added in version 3. */
     internal fun thingCards(onlyNew: Boolean = false): List<Card> {
         val v3 = pictureCards(EnglishDeckContent.PICTURE_THINGS_V3, EnglishDeckExtras.PICTURE_THINGS, THINGS_QUESTION)
-        return if (onlyNew) v3 else pictureCards(EnglishDeckContent.PICTURE_THINGS, EnglishDeckExtras.PICTURE_THINGS, THINGS_QUESTION) + v3
+        val base = pictureCards(EnglishDeckContent.PICTURE_THINGS, EnglishDeckExtras.PICTURE_THINGS, THINGS_QUESTION)
+        return if (onlyNew) v3 else base.drop(REMOVED_THINGS_PACKS * PACK_SIZE) + v3
     }
 
     internal fun actionCards(onlyNew: Boolean = false): List<Card> {
@@ -276,17 +300,6 @@ object EnglishDeck {
                     ),
                 )
             }
-        }
-
-    /** written | how you say it | another way | three examples */
-    internal fun numberCards(): List<Card> =
-        rows(EnglishNumbersContent.NUMBERS).map { r ->
-            Card(
-                mapOf(
-                    "Front" to "**${r[0]}**\n\n*How do you say it?*",
-                    "Back" to "**${r[1]}**\n\nAnother way: ${r[2]}\n\n${quote(r.drop(3))}",
-                ),
-            )
         }
 
     internal fun grammarCards(): List<Card> {
