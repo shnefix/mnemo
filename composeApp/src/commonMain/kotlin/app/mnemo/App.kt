@@ -22,6 +22,7 @@ import app.mnemo.data.io.AutoBackup
 import app.mnemo.data.seed.EnglishB2Deck
 import app.mnemo.data.seed.EnglishDeck
 import app.mnemo.data.seed.GermanA0Deck
+import app.mnemo.data.seed.GermanA1Deck
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.graph.DeckGraph
 import app.mnemo.domain.sync.CloudSync
@@ -80,6 +81,7 @@ fun App(
                     runCatching { EnglishDeck.installOnce(graph) }
                     runCatching { EnglishB2Deck.installOnce(graph) }
                     runCatching { GermanA0Deck.installOnce(graph) }
+                    runCatching { GermanA1Deck.installOnce(graph) }
                     // Every deck on the knowledge graph, plus the English grammar topics.
                     runCatching { DeckGraph.sync(graph) }
                     runCatching { EnglishDeck.syncGraph(graph) }

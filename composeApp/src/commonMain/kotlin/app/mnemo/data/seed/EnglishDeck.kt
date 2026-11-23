@@ -23,7 +23,7 @@ object EnglishDeck {
     const val ROOT = "English (B1–B2)"
 
     /** Bump when the content changes; older installs are updated on the next launch. */
-    const val VERSION = 6
+    const val VERSION = 7
 
     data class Section(
         val name: String,
@@ -36,6 +36,15 @@ object EnglishDeck {
     val situations = Section("3. What to say", 3, "situation")
     val pictures = Section("4. Things to know", 3, "picture")
     val grammar = Section("5. Grammar", 2, "grammar")
+
+    /** Added in version 7: the words learners mix up (say/tell, borrow/lend), as gap fills. */
+    val pairs = Section("6. Confusing pairs", 3, "pairs")
+
+    /** Added in version 7: words that are hard to say, with how they sound. */
+    val pronunciation = Section("8. Pronunciation traps", 2, "pronunciation")
+
+    /** Version in which [pairs] and [pronunciation] were added: older installs get them on update. */
+    private const val MORE_SINCE = 7
 
     /** Spoken, in Speak mode: the phrases that keep a real conversation going. */
     val talk = Section("7. Keep the conversation going", 3, "conversation")
@@ -185,6 +194,9 @@ object EnglishDeck {
                 n.fields["Front"] !in kept && n.updatedAt == n.createdAt && n.tags == listOf("english", pictures.tag)
             }
         packs(grammar, "Grammar", grammarCards(), NoteKind.Cloze)
+        // Added in version 7: new sections, so their cards are created even when only updating.
+        if (from < MORE_SINCE) seed.alwaysCreate(pairCards() + pronunciationCards())
+        packs(pairs, "Pairs", pairCards(), NoteKind.Basic)
         // Added in version 5: spoken practice, so its decks open in Speak mode.
         if (from < TALK_SINCE) seed.alwaysCreate(talkCards())
         talkCategories.forEach { (name, label, text) ->
@@ -198,6 +210,7 @@ object EnglishDeck {
                 mode = ReviewMode.Speak,
             )
         }
+        packs(pronunciation, "Sounds", pronunciationCards(), NoteKind.Basic)
         val changed = seed.commit() + retired.size
         retired.forEach { graph.notes.delete(it.id) }
         // Packs the move left empty.
@@ -300,6 +313,29 @@ object EnglishDeck {
                     ),
                 )
             }
+        }
+
+    /** sentence with ___ | the words people mix up | the answer | the rule | example | example */
+    internal fun pairCards(): List<Card> =
+        rows(EnglishMoreContent.PAIRS).map { r ->
+            val (gapped, choices, answer, rule) = r
+            Card(
+                mapOf(
+                    "Front" to "**${gapped.replace("___", "……")}**\n\n*$choices?*",
+                    "Back" to "${gapped.replace("___", "**$answer**")}\n\n*$rule*\n\n${quote(r.drop(4))}",
+                ),
+            )
+        }
+
+    /** word | how it sounds | tip | example */
+    internal fun pronunciationCards(): List<Card> =
+        rows(EnglishMoreContent.PRONUNCIATION).map { (word, sound, tip, example) ->
+            Card(
+                mapOf(
+                    "Front" to "**$word**\n\n*How do you say it?*",
+                    "Back" to "**$sound**\n\n$tip\n\n${quote(listOf(example))}",
+                ),
+            )
         }
 
     internal fun grammarCards(): List<Card> {

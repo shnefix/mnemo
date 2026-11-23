@@ -48,6 +48,12 @@
 - **Taken out** (English deck v6): "Numbers, time & money" and the first six "Things" packs
   (Things 01–06; the rest keep their numbers, starting at 07). Older installs move them to the deck
   trash on update (`EnglishDeck.removeTakenOut`), new installs never get them.
+- **More sections** (English deck v7, B2 deck v3, new German A1 deck v1; content in
+  `EnglishMoreContent.kt` and `GermanA1Content.kt`): "6. Confusing pairs" (48 gap fills such as
+  say/tell, borrow/lend) and "8. Pronunciation traps" (54 words with how they sound) in the B1–B2
+  deck; "2. Work English" (44 situations) and "6. Everyday dialogues" (60 lines to listen to and
+  type) in the B2 deck; and "German (A1)": 43 verbs (ich/du/er), 31 word-order puzzles, 30
+  questions and a Type-mode drill for the du-form. Older installs get the new sections on update.
 - **Keep the conversation going** (English deck v5, `EnglishTalkContent.kt`): "7. Keep the
   conversation going" — 78 situation cards in Speak mode (the question is asked aloud, you answer
   aloud): reactions, follow-up questions, polite & softening phrases, buying time & fixing what you

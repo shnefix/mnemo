@@ -18,7 +18,7 @@ object EnglishB2Deck {
     const val ROOT = "English B2 practice"
 
     /** Bump when the content changes; older installs are updated on the next launch. */
-    const val VERSION = 2
+    const val VERSION = 3
 
     data class Section(
         val name: String,
@@ -29,14 +29,19 @@ object EnglishB2Deck {
     // "My mistakes" comes first: the daily mix takes sub-decks in name order, and your own
     // mistakes are the most valuable cards you'll ever have.
     val mistakes = Section("1. My mistakes", 5, "my-mistake")
+    val workEnglish = Section("2. Work English", 3, "work")
     val phrasalVerbs = Section("3. Phrasal verbs by topic", 3, "phrasal-verb")
     val wordFamilies = Section("4. Word families", 2, "word-family")
 
     /** Tagged "linking" so the cards join the grammar deck's "Linking words" topic on the graph. */
     val linking = Section("5. Linking words", 2, "linking")
+    val dialogues = Section("6. Everyday dialogues", 2, "dialogue")
     val listening = Section("7. Listening", 2, "listening")
 
-    val sections = listOf(mistakes, phrasalVerbs, wordFamilies, linking, listening)
+    val sections = listOf(mistakes, workEnglish, phrasalVerbs, wordFamilies, linking, dialogues, listening)
+
+    /** Version in which [workEnglish] and [dialogues] were added: older installs get them on update. */
+    private const val MORE_SINCE = 3
 
     /** Version 2 took out "2. Collocations" and "6. Say it another way"; older installs trash them on update. */
     private const val REMOVED_SINCE = 2
@@ -76,6 +81,9 @@ object EnglishB2Deck {
 
         // Empty on purpose: add the mistakes you make when you write or speak.
         seed.deck(mistakes.name, mistakes.newPerDay)
+        // Added in version 3: new sections, so their cards are created even when only updating.
+        if (from < MORE_SINCE) seed.alwaysCreate(workCards() + dialogueCards())
+        seed.packs(workEnglish.name, workEnglish.newPerDay, "Work", workCards(), NoteKind.Basic, tags(workEnglish))
         seed.deck(phrasalVerbs.name, phrasalVerbs.newPerDay)
         phrasalVerbCards().forEach { (topic, cards) ->
             seed.fill(seed.deck("${phrasalVerbs.name}::${phrasalTopics.getValue(topic)}", 10), NoteKind.Basic, cards, tags(phrasalVerbs))
@@ -91,6 +99,15 @@ object EnglishB2Deck {
             packSize = 9,
         )
         seed.packs(linking.name, linking.newPerDay, "Linking", linkingCards(), NoteKind.Basic, tags(linking))
+        seed.packs(
+            dialogues.name,
+            dialogues.newPerDay,
+            "Dialogue",
+            dialogueCards(),
+            NoteKind.TypeAnswer,
+            tags(dialogues),
+            mode = ReviewMode.Type,
+        )
         seed.packs(
             listening.name,
             listening.newPerDay,
@@ -151,6 +168,23 @@ object EnglishB2Deck {
                     "Back" to "$use\n\n*$how*\n\n${EnglishDeck.quote(r.drop(3))}",
                 ),
             )
+        }
+
+    /** situation | what you say | another way | another way */
+    internal fun workCards(): List<Card> =
+        EnglishDeck.rows(EnglishMoreContent.WORK).map { (situation, say, other1, other2) ->
+            Card(
+                mapOf(
+                    "Front" to "$situation\n\n*What do you say?*",
+                    "Back" to "**$say**\n\nOther ways to say it:\n\n- $other1\n- $other2",
+                ),
+            )
+        }
+
+    /** The lines of everyday dialogues: the app reads one aloud and you type it. */
+    internal fun dialogueCards(): List<Card> =
+        EnglishDeck.rows(EnglishMoreContent.DIALOGUES).map { (sentence) ->
+            Card(mapOf("Front" to "[listen: $sentence]", "Back" to sentence))
         }
 
     /** Dictation: the app reads the sentence aloud and you type it. */
