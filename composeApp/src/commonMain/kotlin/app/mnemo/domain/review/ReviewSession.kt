@@ -29,6 +29,8 @@ class ReviewSession(
     private val deckId: Long?,
     /** When set, the session reviews exactly these cards (a weak-spot session) instead of what is due. */
     private val cardIds: List<Long>? = null,
+    /** When set, only due cards in these states are studied (a Today "layer": review, learning or new). */
+    private val states: Set<CardState>? = null,
 ) {
     private val queue = ArrayDeque<Card>()
     private val undoStack = ArrayDeque<UndoEntry>()
@@ -92,6 +94,7 @@ class ReviewSession(
                 cardIds.mapNotNull { graph.cards.byId(it) }.filter { !it.suspended }
             } else {
                 gate(DailyQueue.cards(graph, deckId, now, decks), now)
+                    .filter { states == null || it.state in states }
             }
         queue.addAll(cards)
         total = cards.size

@@ -6,6 +6,7 @@ import app.mnemo.di.AppGraph
 import app.mnemo.domain.cards.CardGenerator
 import app.mnemo.domain.cards.RenderedCard
 import app.mnemo.domain.graph.WeakSpots
+import app.mnemo.domain.model.CardState
 import app.mnemo.domain.model.CardView
 import app.mnemo.domain.model.NoteType
 import app.mnemo.domain.model.Rating
@@ -52,10 +53,20 @@ data class ReviewUiState(
     val typing: Boolean get() = rendered?.expected != null && (mode == ReviewMode.Type || rendered.listen != null)
 }
 
+/** The card states a Today layer ("review", "learning", "new") stands for. */
+private fun layerStates(layer: String?): Set<CardState>? =
+    when (layer) {
+        "review" -> setOf(CardState.Review)
+        "learning" -> setOf(CardState.Learning, CardState.Relearning)
+        "new" -> setOf(CardState.New)
+        else -> null
+    }
+
 class ReviewViewModel(
     private val graph: AppGraph,
     private val deckId: Long?,
     private val weak: Boolean = false,
+    private val layer: String? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ReviewUiState())
     val state: StateFlow<ReviewUiState> = _state.asStateFlow()
@@ -72,12 +83,17 @@ class ReviewViewModel(
                 if (weak) {
                     ReviewSession(graph, null, WeakSpots.sessionCards(graph, graph.clock.now()))
                 } else {
-                    ReviewSession(graph, deckId)
+                    ReviewSession(graph, deckId, states = layerStates(layer))
                 }
             session.load()
             _state.update {
                 it.copy(
-                    deckName = if (weak) "Weak spots" else deck?.path ?: "All decks",
+                    deckName =
+                        if (weak) {
+                            "Weak spots"
+                        } else {
+                            (deck?.path ?: "All decks") + (layer?.let { " · $it only" } ?: "")
+                        },
                     mode = deck?.settings?.mode ?: ReviewMode.Classic,
                     language = deck?.settings?.language,
                 )

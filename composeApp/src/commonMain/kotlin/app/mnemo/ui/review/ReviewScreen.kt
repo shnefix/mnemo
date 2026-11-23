@@ -88,12 +88,13 @@ import kotlin.math.roundToInt
 fun ReviewScreen(
     deckId: Long?,
     weak: Boolean = false,
+    layer: String? = null,
     onExit: () -> Unit,
     onEdit: (noteId: Long) -> Unit,
     onSearch: () -> Unit = {},
 ) {
     val graph = LocalAppGraph.current
-    val vm: ReviewViewModel = viewModel(key = "review-$deckId-$weak") { ReviewViewModel(graph, deckId, weak) }
+    val vm: ReviewViewModel = viewModel(key = "review-$deckId-$weak-$layer") { ReviewViewModel(graph, deckId, weak, layer) }
     val state by vm.state.collectAsState()
     val compact = LocalWindowSize.current == WindowSize.Compact
     val focus = remember { FocusRequester() }

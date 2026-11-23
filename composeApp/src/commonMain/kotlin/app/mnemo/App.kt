@@ -183,6 +183,7 @@ fun App(
                         composable<Route.Today> {
                             TodayScreen(
                                 onReview = { nav.navigate(Route.Review(it)) },
+                                onReviewLayer = { nav.navigate(Route.Review(layer = it)) },
                                 onAddCards = { nav.navigate(Route.Editor()) },
                                 onDecks = { nav.navigate(Route.Decks) { launchSingleTop = true } },
                                 onWeakSpots = { nav.navigate(Route.Review(weak = true)) },
@@ -215,6 +216,7 @@ fun App(
                             ReviewScreen(
                                 deckId = route.deckId,
                                 weak = route.weak,
+                                layer = route.layer,
                                 onExit = { if (!nav.popBackStack()) goHome() },
                                 onEdit = { nav.navigate(Route.Editor(noteId = it)) },
                                 onSearch = { nav.navigate(Route.Browse) },

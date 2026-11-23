@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,7 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -31,14 +34,24 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.mnemo.LocalAppGraph
 import app.mnemo.ui.components.EmptyState
@@ -51,7 +64,6 @@ import app.mnemo.ui.nav.LocalWindowSize
 import app.mnemo.ui.nav.WindowSize
 import app.mnemo.ui.theme.MnemoColors
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.isoDayNumber
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -62,12 +74,14 @@ fun TodayScreen(
     onDecks: () -> Unit,
     onWeakSpots: () -> Unit,
     onQuiz: () -> Unit = {},
+    onReviewLayer: (String) -> Unit = {},
 ) {
     val graph = LocalAppGraph.current
     val vm: TodayViewModel = viewModel(key = "today") { TodayViewModel(graph) }
     val state by vm.state.collectAsState()
     val compact = LocalWindowSize.current == WindowSize.Compact
     val pad = if (compact) 20.dp else 40.dp
+    var layer by rememberSaveable { mutableStateOf<String?>(null) }
     DisposableEffect(vm) {
         vm.setVisible(true)
         onDispose { vm.setVisible(false) }
@@ -77,8 +91,10 @@ fun TodayScreen(
         Column(Modifier.widthIn(max = 1120.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
-                    Text(state.today?.let(::prettyDate) ?: "", style = MaterialTheme.typography.labelLarge, color = MnemoColors.text2)
-                    Spacer(Modifier.height(2.dp))
+                    if (!compact) {
+                        Text(state.today?.let(::prettyDate) ?: "", style = MaterialTheme.typography.labelLarge, color = MnemoColors.text2)
+                        Spacer(Modifier.height(2.dp))
+                    }
                     Text(
                         if (compact) "Ready for today?" else "Today",
                         style = if (compact) MaterialTheme.typography.displaySmall else MaterialTheme.typography.displayMedium,
@@ -92,46 +108,15 @@ fun TodayScreen(
             Spacer(Modifier.height(20.dp))
             QuizBanner(onQuiz)
 
-            // Hero: due now (Design C block, Design A numbers)
+            // Hero: due now, with one tab per layer (review / learning / new) stacked above it.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Panel(
+                LayeredHero(
+                    state = state,
+                    chosen = layer,
+                    onSelect = { layer = it },
+                    onStart = { picked -> if (picked == null) onReview(null) else onReviewLayer(picked) },
                     modifier = Modifier.weight(2f),
-                    color = MnemoColors.coral,
-                    radius = 28.dp,
-                    padding = PaddingValues(24.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Eyebrow("Due now", color = MnemoColors.onCoral)
-                        Spacer(Modifier.weight(1f))
-                        Pill("about ${state.estimatedMinutes} min")
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text("${state.due.total}", style = MaterialTheme.typography.displayLarge, color = MnemoColors.onCoral)
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            "cards",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MnemoColors.onCoral,
-                            modifier = Modifier.padding(bottom = 10.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Pill("${state.due.new} new")
-                        Pill("${state.due.learning} learning")
-                        Pill("${state.due.review} review")
-                    }
-                    Spacer(Modifier.height(18.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DarkButton(
-                            text = "Start review",
-                            onClick = { onReview(null) },
-                            modifier = Modifier.weight(1f),
-                            enabled = state.due.total > 0,
-                        )
-                    }
-                }
+                )
                 if (!compact) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         StreakPanel(state)
@@ -165,61 +150,11 @@ fun TodayScreen(
             // Decks
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Decks", style = MaterialTheme.typography.headlineMedium, color = MnemoColors.text, modifier = Modifier.weight(1f))
-                MnemoButton("All decks", onClick = onDecks, height = 36.dp)
+                if (!compact) MnemoButton("All decks", onClick = onDecks, height = 36.dp)
             }
             Spacer(Modifier.height(12.dp))
             if (compact) {
-                state.decks.chunked(2).forEachIndexed { row, pair ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        pair.forEachIndexed { i, d ->
-                            val tile = listOf(MnemoColors.sky, MnemoColors.lime, MnemoColors.lavender)[(row * 2 + i) % 3]
-                            Panel(
-                                modifier =
-                                    Modifier
-                                        .weight(
-                                            1f,
-                                        ).height(110.dp),
-                                color = tile,
-                                radius = 22.dp,
-                                padding = PaddingValues(14.dp),
-                                onClick = {
-                                    onReview(d.deck.id)
-                                },
-                            ) {
-                                val parent = d.deck.path.substringBeforeLast("::", "")
-                                if (parent.isNotEmpty()) {
-                                    Text(
-                                        parent,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MnemoColors.onLime.copy(alpha = 0.7f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                Text(
-                                    d.deck.name,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MnemoColors.onLime,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Spacer(Modifier.weight(1f))
-                                Row(verticalAlignment = Alignment.Bottom) {
-                                    Text("${d.due.total}", style = MaterialTheme.typography.headlineLarge, color = MnemoColors.onLime)
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        "due",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MnemoColors.onLime,
-                                        modifier = Modifier.padding(bottom = 4.dp),
-                                    )
-                                }
-                            }
-                            if (i == 0 && pair.size == 1) Spacer(Modifier.weight(1f))
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                }
+                DeckStrip(state.decks, pad, onOpen = { onReview(it) }, onAll = onDecks)
             } else {
                 Panel(padding = PaddingValues(0.dp)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
@@ -324,9 +259,9 @@ fun TodayScreen(
 
 @Composable
 private fun StreakPanel(state: TodayUiState) {
-    Panel(color = MnemoColors.surface2, radius = 22.dp, padding = PaddingValues(16.dp)) {
+    Panel(color = MnemoColors.surface2, radius = 24.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(36.dp).clip(RoundedCornerShape(18.dp)).background(MnemoColors.lime), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(32.dp).clip(CircleShape).background(MnemoColors.lime), contentAlignment = Alignment.Center) {
                 Icon(MnemoIcons.Flame, contentDescription = null, tint = MnemoColors.onLime, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.width(10.dp))
@@ -337,38 +272,285 @@ private fun StreakPanel(state: TodayUiState) {
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
             )
+            val doneToday = state.weekDays.lastOrNull() == true
+            Text(
+                if (doneToday) "Done today" else "Make it ${state.streak + 1} today",
+                style = MaterialTheme.typography.bodySmall,
+                color = MnemoColors.text2,
+                maxLines = 1,
+            )
         }
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("This week", style = MaterialTheme.typography.bodySmall, color = MnemoColors.text2, modifier = Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                val labels = listOf("M", "T", "W", "T", "F", "S", "S")
-                val todayIso = state.today?.dayOfWeek?.isoDayNumber ?: 1 // 1 = Monday
-                val startIdx = (todayIso - 1 - 6 + 7) % 7
-                state.weekDays.forEachIndexed { i, done ->
-                    val isToday = i == 6
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            val today = state.today
+            state.weekDays.forEachIndexed { i, done ->
+                val isToday = i == 6
+                val date = today?.let { LocalDate.fromEpochDays(it.toEpochDays() - (6 - i)) }
+                Column(
+                    Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Text(
+                        if (isToday) {
+                            "Today"
+                        } else {
+                            date
+                                ?.dayOfWeek
+                                ?.name
+                                ?.take(3)
+                                ?.lowercase()
+                                ?.replaceFirstChar { it.uppercase() } ?: ""
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isToday) MnemoColors.lime else MnemoColors.text2,
+                        maxLines = 1,
+                    )
+                    val dash = MnemoColors.lime
                     Box(
                         Modifier
-                            .size(24.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .size(30.dp)
+                            .clip(CircleShape)
                             .background(
                                 if (done) {
                                     MnemoColors.lime
                                 } else if (isToday) {
-                                    MnemoColors.surface3
+                                    Color.Transparent
                                 } else {
                                     MnemoColors.surface3
+                                },
+                            ).then(
+                                if (isToday && !done) {
+                                    Modifier.drawBehind {
+                                        drawCircle(
+                                            color = dash,
+                                            radius = size.minDimension / 2 - 1.dp.toPx(),
+                                            style =
+                                                Stroke(
+                                                    2.dp.toPx(),
+                                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())),
+                                                ),
+                                        )
+                                    }
+                                } else {
+                                    Modifier
                                 },
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            labels[(startIdx + i) % 7],
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (done) MnemoColors.onLime else MnemoColors.text2,
+                            "${date?.day ?: ""}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color =
+                                if (done) {
+                                    MnemoColors.onLime
+                                } else if (isToday) {
+                                    MnemoColors.lime
+                                } else {
+                                    MnemoColors.text2
+                                },
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/** The tab fill for each layer; amber stays the same in both themes so the dark label on it reads. */
+private val LayerAmber = Color(0xFFFFC247)
+
+private class Layer(
+    val id: String,
+    val label: String,
+    val word: String,
+    val count: Int,
+    val color: Color,
+    val inset: Int,
+)
+
+/**
+ * "Due now" with its layers: REVIEW, LEARNING and NEW tabs peek out above the card like stacked folders.
+ * Tap one to study just that type (the card changes to match), tap it again to go back to everything.
+ */
+@Composable
+private fun LayeredHero(
+    state: TodayUiState,
+    chosen: String?,
+    onSelect: (String?) -> Unit,
+    onStart: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val layers =
+        listOf(
+            Layer("review", "REVIEW", "review", state.due.review, MnemoColors.sky, 18),
+            Layer("learning", "LEARNING", "learning", state.due.learning, MnemoColors.lime, 12),
+            Layer("new", "NEW", "new", state.due.new, LayerAmber, 6),
+        )
+    val current = layers.firstOrNull { it.id == chosen }
+    val count = current?.count ?: state.due.total
+    // The estimate is for everything due; a layer takes its share of it.
+    val minutes =
+        if (current == null || state.due.total == 0) {
+            state.estimatedMinutes
+        } else {
+            (state.estimatedMinutes * current.count / state.due.total).coerceAtLeast(if (current.count > 0) 1 else 0)
+        }
+    Column(modifier) {
+        layers.forEach { t ->
+            val on = t.id == chosen
+            // 58dp tall, but only the top 38dp takes up room: the next tab (or the card) covers the rest.
+            Box(
+                Modifier
+                    .padding(horizontal = t.inset.dp)
+                    .fillMaxWidth()
+                    .height(38.dp)
+                    .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                    .height(58.dp)
+                    .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                    .background(t.color)
+                    .semantics { selected = on }
+                    .clickable(role = Role.Tab) { onSelect(if (on) null else t.id) }
+                    .padding(horizontal = 18.dp),
+            ) {
+                Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        t.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.9.sp,
+                        color = MnemoColors.onCoral,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("${t.count} cards", style = MaterialTheme.typography.labelLarge, color = MnemoColors.onCoral)
+                    if (on) {
+                        Spacer(Modifier.width(10.dp))
+                        Box(Modifier.size(22.dp).clip(CircleShape).background(MnemoColors.onCoral), contentAlignment = Alignment.Center) {
+                            Icon(MnemoIcons.Check, contentDescription = "Selected", tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+            }
+        }
+        Panel(
+            color = MnemoColors.coral,
+            radius = 26.dp,
+            padding = PaddingValues(20.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Eyebrow(if (current == null) "Due now" else "${current.label} only", color = MnemoColors.onCoral)
+                Spacer(Modifier.weight(1f))
+                Pill("about $minutes min")
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("$count", style = MaterialTheme.typography.displayLarge, color = MnemoColors.onCoral)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "cards",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MnemoColors.onCoral,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                if (current == null) "Tap a layer to study just that type" else "Tap the layer again to study everything",
+                style = MaterialTheme.typography.labelLarge,
+                color = MnemoColors.onCoral,
+            )
+            Spacer(Modifier.height(12.dp))
+            DarkButton(
+                text = if (current == null) "Start review" else "Study ${current.count} ${current.word} cards",
+                onClick = { onStart(current?.id) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = count > 0,
+            )
+        }
+    }
+}
+
+/** Phone decks: a swipeable strip of small tiles, then an "All decks" tile. */
+@Composable
+private fun DeckStrip(
+    decks: List<TodayDeck>,
+    sidePad: androidx.compose.ui.unit.Dp,
+    onOpen: (Long) -> Unit,
+    onAll: () -> Unit,
+) {
+    val bars = listOf(MnemoColors.sky, MnemoColors.lime, MnemoColors.lavender)
+    val bleed = with(androidx.compose.ui.platform.LocalDensity.current) { sidePad.roundToPx() }
+    // Runs edge to edge: the screen's side padding becomes the strip's own content padding.
+    LazyRow(
+        modifier =
+            Modifier.layout { measurable, c ->
+                val p = measurable.measure(c.copy(minWidth = c.maxWidth + 2 * bleed, maxWidth = c.maxWidth + 2 * bleed))
+                layout(c.maxWidth, p.height) { p.place(-bleed, 0) }
+            },
+        contentPadding = PaddingValues(horizontal = sidePad),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        itemsIndexed(decks, key = { _, d -> d.deck.id }) { i, d ->
+            Column(
+                Modifier
+                    .width(160.dp)
+                    .height(92.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MnemoColors.surface2)
+                    .clickable(role = Role.Button) { onOpen(d.deck.id) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(width = 8.dp, height = 24.dp).clip(RoundedCornerShape(999.dp)).background(bars[i % bars.size]))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        d.deck.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MnemoColors.text,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        "${d.due.total}",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MnemoColors.text,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "due",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MnemoColors.text2,
+                        modifier = Modifier.padding(bottom = 2.dp),
+                    )
+                }
+            }
+        }
+        item {
+            val dash = MnemoColors.outlineStrong
+            Column(
+                Modifier
+                    .width(100.dp)
+                    .height(92.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(role = Role.Button, onClick = onAll)
+                    .drawBehind {
+                        drawRoundRect(
+                            color = dash,
+                            cornerRadius = CornerRadius(20.dp.toPx()),
+                            style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx()))),
+                        )
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(MnemoIcons.ArrowRight, contentDescription = null, tint = MnemoColors.text2, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.height(6.dp))
+                Text("All decks", style = MaterialTheme.typography.labelLarge, color = MnemoColors.text2)
             }
         }
     }

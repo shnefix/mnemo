@@ -12,6 +12,8 @@ sealed interface Route {
         val deckId: Long? = null,
         /** Review the cards of the weakest concepts instead of what is due. */
         val weak: Boolean = false,
+        /** Study only one layer of what is due: "review", "learning" or "new" (null = all of it). */
+        val layer: String? = null,
     ) : Route
 
     @Serializable data object Browse : Route

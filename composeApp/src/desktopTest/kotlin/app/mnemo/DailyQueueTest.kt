@@ -3,6 +3,7 @@ package app.mnemo
 import app.mnemo.data.db.DriverFactory
 import app.mnemo.data.seed.EnglishDeck
 import app.mnemo.di.AppGraph
+import app.mnemo.domain.model.CardState
 import app.mnemo.domain.model.DeckSettings
 import app.mnemo.domain.model.NoteKind
 import app.mnemo.domain.model.Rating
@@ -88,6 +89,33 @@ class DailyQueueTest {
             assertEquals(17, DailyQueue.counts(g, null, clock.now()).new)
             // Learned cards are not due again yet (Easy), so nothing else is in the queue.
             assertEquals(17, DailyQueue.cards(g, null, clock.now()).size)
+        }
+
+    @Test
+    fun aLayerSessionOnlyHandsOutThatKindOfCard() =
+        runBlocking {
+            val clock = TestClock(1_750_000_000_000L)
+            val g = graph(clock)
+            val basic = g.notes.noteTypeOf(NoteKind.Basic)
+            val deck = g.decks.createByPath("Layers", DeckSettings(newPerDay = 30))
+            repeat(6) { i -> g.notes.create(deck, basic, mapOf("Front" to "q$i", "Back" to "x"), emptyList()) }
+            // Learn two (Easy -> review later), then ten days on there are 2 review cards and 4 new ones.
+            ReviewSession(g, deck).apply {
+                load()
+                repeat(2) { answer(Rating.Easy, responseMs = 1000) }
+            }
+            clock.time += 10 * 86_400_000L
+
+            assertEquals(4, ReviewSession(g, deck, states = setOf(CardState.New)).also { it.load() }.total)
+            assertEquals(2, ReviewSession(g, deck, states = setOf(CardState.Review)).also { it.load() }.total)
+            assertEquals(0, ReviewSession(g, deck, states = setOf(CardState.Learning, CardState.Relearning)).also { it.load() }.total)
+            assertEquals(6, ReviewSession(g, deck).also { it.load() }.total)
+            val review = ReviewSession(g, deck, states = setOf(CardState.Review)).also { it.load() }
+            while (true) {
+                val card = review.current() ?: break
+                assertEquals(CardState.Review, card.card.state)
+                review.answer(Rating.Easy, responseMs = 1000)
+            }
         }
 
     @Test
