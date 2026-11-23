@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.unit.Density
 import app.mnemo.data.db.DriverFactory
 import app.mnemo.di.AppGraph
@@ -168,6 +170,7 @@ class ScreenshotTest {
         height: Int,
         graph: AppGraph,
         mode: ThemeMode = ThemeMode.Dark,
+        tapAt: Offset? = null,
         content: @Composable () -> Unit,
     ) {
         val scene =
@@ -182,6 +185,16 @@ class ScreenshotTest {
                 scene.render(t)
                 Thread.sleep(120)
                 t += 16_000_000L
+            }
+            // A tap once the screen has loaded (say, on the card to show its answer), then let it settle.
+            if (tapAt != null) {
+                scene.sendPointerEvent(PointerEventType.Press, tapAt)
+                scene.sendPointerEvent(PointerEventType.Release, tapAt)
+                repeat(8) {
+                    scene.render(t)
+                    Thread.sleep(120)
+                    t += 16_000_000L
+                }
             }
             val image = scene.render(t)
             val bytes = image.encodeToData(EncodedImageFormat.PNG)!!.bytes
@@ -221,10 +234,34 @@ class ScreenshotTest {
             render("stats-$tag", w, h, g) { Shell(NavSection.Stats) { StatsScreen({}) } }
             render("settings-$tag", w, h, g) { Shell(null) { SettingsScreen() } }
             render("review-$tag", w, h, g) { ReviewScreen(null, onExit = {}, onEdit = {}) }
+            render("review-answer-$tag", w, h, g, tapAt = Offset(w / 2f, h / 3f)) { ReviewScreen(null, onExit = {}, onEdit = {}) }
             render("editor-$tag", w, h, g) { NoteEditorScreen(null, null, {}) }
             render("onboarding-$tag", w, h, g) { OnboardingScreen({}) }
         }
         render("today-light", desktop.first, desktop.second, g, ThemeMode.Light) { Shell(NavSection.Today) { TodayScreen({}, {}, {}, {}) } }
         render("review-light", phone.first, phone.second, g, ThemeMode.Light) { ReviewScreen(null, onExit = {}, onEdit = {}) }
+        render("review-answer-light", phone.first, phone.second, g, ThemeMode.Light, tapAt = Offset(195f, 280f)) {
+            ReviewScreen(null, onExit = {}, onEdit = {})
+        }
+        // A Basic card with a one-word answer: the word is shown big, the explanation under it.
+        val pairs =
+            runBlocking {
+                val deck = g.decks.createByPath("English::Confusing pairs")
+                val basic = g.notes.noteTypeOf(NoteKind.Basic)
+                g.notes.create(
+                    deck,
+                    basic,
+                    mapOf(
+                        "Front" to "The new rules will ___ everyone in the office.\n\n*affect or effect?*",
+                        "Back" to "affect\nA verb: to change or influence something.\n\n*Effect* is usually the noun: the result.",
+                    ),
+                    listOf("confusing-pairs"),
+                )
+                deck
+            }
+        render("review-basic-phone", phone.first, phone.second, g) { ReviewScreen(pairs, onExit = {}, onEdit = {}) }
+        render("review-basic-answer-phone", phone.first, phone.second, g, tapAt = Offset(195f, 300f)) {
+            ReviewScreen(pairs, onExit = {}, onEdit = {})
+        }
     }
 }

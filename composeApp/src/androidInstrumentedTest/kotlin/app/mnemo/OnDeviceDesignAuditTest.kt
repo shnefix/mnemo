@@ -191,7 +191,9 @@ class OnDeviceDesignAuditTest {
             lint("11-decks-with-data")
 
             // The deck's own page (tap its name), then Deck settings from there.
-            rule.onNode(hasText(deck) and hasRole(Role.Button)).performClick()
+            // The deck list loads in the background: wait for this deck's card before tapping it.
+            rule.waitUntil(15_000) { exists(hasText(deck) and hasRole(Role.Button)) }
+            rule.onNode(hasText(deck) and hasRole(Role.Button)).performScrollTo().performClick()
             rule.waitUntil(15_000) { exists(hasText("Study $deck") and hasRole(Role.Button)) }
             lint("12-deck-page")
             rule.onNodeWithText("Deck settings").performScrollTo().performClick()

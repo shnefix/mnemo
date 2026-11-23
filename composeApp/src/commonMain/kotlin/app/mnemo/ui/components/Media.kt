@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
@@ -49,6 +50,7 @@ private val soundRef = Regex("""\[sound:([^\]]+)\]""")
 fun MarkdownText(
     text: String,
     modifier: Modifier = Modifier,
+    color: Color = MnemoColors.text,
 ) {
     val sounds = remember(text) { soundRef.findAll(text).map { it.groupValues[1] }.toList() }
     val images = remember(text) { imageRef.findAll(text).map { it.groupValues[1] }.toList() }
@@ -58,7 +60,7 @@ fun MarkdownText(
         if (plain.isNotEmpty()) {
             Markdown(
                 content = plain,
-                colors = markdownColor(text = MnemoColors.text),
+                colors = markdownColor(text = color),
                 typography = markdownTypography(),
                 components = markdownComponents(codeBlock = highlightedCodeBlock, codeFence = highlightedCodeFence),
             )
