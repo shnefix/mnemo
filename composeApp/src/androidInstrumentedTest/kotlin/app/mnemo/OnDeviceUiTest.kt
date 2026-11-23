@@ -6,18 +6,17 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToString
@@ -92,13 +91,16 @@ class OnDeviceUiTest {
         waitFor(hasText("Preview · 1 card", ignoreCase = true)) // the eyebrow renders in capitals
         rule.onNodeWithText("Save & close").performClick()
 
-        // 3. Decks tab shows the new deck with one due card; tapping it starts a review.
+        // 3. Decks tab shows the new deck with one due card; tapping its name opens its page, which starts a review.
         waitFor(hasContentDescription("Create cards"))
         rule.onNode(hasText("Decks") and hasRole(Role.Tab)).performClick()
         scrollDecksTo(deckName)
-        // The row merges its texts, so match the count on this run's deck rather than on any row.
-        rule.onNode(hasText(deckName) and hasText("1 cards · 1 due")).assertIsDisplayed()
-        rule.onNodeWithText(deckName).performClick()
+        // The name button merges its texts, so match the count on this run's deck rather than on any card.
+        rule.onNode(hasText(deckName) and hasText("1 cards · not started")).assertIsDisplayed()
+        rule.onNodeWithContentDescription("Study 1 cards in $deckName").assertIsDisplayed()
+        rule.onNode(hasText(deckName) and hasRole(Role.Button)).performClick()
+        waitFor(hasText("Study $deckName") and hasRole(Role.Button))
+        rule.onNode(hasText("Study $deckName") and hasRole(Role.Button)).performClick()
 
         // 4. Review: reveal, grade Good, session ends.
         waitFor(hasText("Capital of France?"))
@@ -108,28 +110,37 @@ class OnDeviceUiTest {
         rule.waitUntil(15_000) { exists(hasText("Session done")) || exists(hasText("Capital of France?")) }
         rule.onNodeWithContentDescription("End session").performClick()
 
-        // 5. Clean up: delete this run's deck (and any left behind by earlier failed runs) through the row menu.
-        // Ending the session may land on Today, which also shows the deck as a tile: go to Decks first.
+        // 5. Clean up: delete this run's deck (and any left behind by earlier failed runs) from each deck's own page.
+        // Ending the session may land on Today or the deck page: go to the deck list first.
         waitFor(hasText("Decks") and hasRole(Role.Tab))
         rule.onNode(hasText("Decks") and hasRole(Role.Tab)).performClick()
         scrollDecksTo(deckName)
-        // Only a menu inside a "UiTest" deck row, and only a dialog that names a "UiTest" deck: the
+        // Only the name button of a "UiTest" deck card, and only a dialog that names a "UiTest" deck: the
         // deck name also shows elsewhere for a moment (the "deleted" snackbar), never act on that.
-        val testDeckMenu = hasContentDescription("Deck menu") and hasAnyAncestor(hasText("UiTest ", substring = true))
-        waitFor(testDeckMenu)
+        val testDeckCard = hasText("UiTest ", substring = true) and hasText(" cards · ", substring = true) and hasRole(Role.Button)
+        waitFor(testDeckCard)
         var rounds = 0
-        while (rounds++ < 5 && exists(testDeckMenu)) {
-            val before = rule.onAllNodes(testDeckMenu).fetchSemanticsNodes().size
-            rule.onAllNodes(testDeckMenu).onFirst().performClick()
+        while (rounds++ < 5 && exists(testDeckCard)) {
+            rule.waitForIdle()
+            // The list may still be settling after the last delete: read the deck's name, then tap that card.
+            val node = rule.onAllNodes(testDeckCard).fetchSemanticsNodes().firstOrNull() ?: break
+            val texts: List<String> = node.config.getOrElse(SemanticsProperties.Text) { emptyList() }.map { t -> t.text }
+            val name = texts.firstOrNull { t -> t.startsWith("UiTest ") } ?: break
+            val card = hasText(name) and hasText(" cards · ", substring = true) and hasRole(Role.Button)
+            rule.onNode(card).performScrollTo().performClick()
+            waitFor(hasContentDescription("Rename or delete deck"))
+            rule.onNodeWithContentDescription("Rename or delete deck").performClick()
             waitFor(hasText("Delete"))
             rule.onNodeWithText("Delete").performClick()
             waitFor(hasText("Delete “UiTest ", substring = true) and hasAnyAncestor(isDialog()))
             rule.onNode(hasText("Delete") and hasAnyAncestor(isDialog())).performClick()
             rule.waitUntil(15_000) { !exists(isDialog()) }
-            // The deleted row animates out: wait until it is gone before looking for the next one.
-            rule.waitUntil(15_000) { rule.onAllNodes(testDeckMenu).fetchSemanticsNodes().size < before }
+            // The page closes itself once its deck is gone; then look for another left-over test deck.
+            rule.waitUntil(15_000) { !exists(hasContentDescription("Rename or delete deck")) }
+            rule.waitUntil(15_000) { !exists(card) }
+            runCatching { rule.onNode(hasScrollToNodeAction()).performScrollToNode(testDeckCard) }
         }
-        rule.waitUntil(15_000) { !exists(hasText(deckName) and hasAnyDescendant(hasContentDescription("Deck menu"))) }
+        rule.waitUntil(15_000) { !exists(hasText(deckName) and hasText(" cards · ", substring = true) and hasRole(Role.Button)) }
     }
 
     /** The built-in English deck is added on launch and shows in the deck list. */

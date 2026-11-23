@@ -16,7 +16,15 @@ sealed interface Route {
         val layer: String? = null,
     ) : Route
 
-    @Serializable data object Browse : Route
+    @Serializable data class Browse(
+        /** A search to start with, e.g. `deck:"German"` from a deck page. */
+        val query: String? = null,
+    ) : Route
+
+    /** One deck's own page. */
+    @Serializable data class Deck(
+        val deckId: Long,
+    ) : Route
 
     @Serializable data class Editor(
         val noteId: Long? = null,
@@ -41,6 +49,6 @@ enum class NavSection(
 ) {
     Today("Today", Route.Today),
     Decks("Decks", Route.Decks),
-    Browse("Browse", Route.Browse),
+    Browse("Browse", Route.Browse()),
     Stats("Stats", Route.Stats),
 }

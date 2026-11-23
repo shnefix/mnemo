@@ -30,6 +30,7 @@ import app.mnemo.platform.Prefs
 import app.mnemo.platform.Speech
 import app.mnemo.ui.browse.BrowseScreen
 import app.mnemo.ui.decks.DeckListScreen
+import app.mnemo.ui.decks.DeckScreen
 import app.mnemo.ui.decks.DeckSettingsScreen
 import app.mnemo.ui.editor.NoteEditorScreen
 import app.mnemo.ui.nav.AdaptiveScaffold
@@ -143,6 +144,8 @@ fun App(
                     NavSection.entries.firstOrNull { section ->
                         routeName.substringBefore('/').substringBefore('?').endsWith(section.route::class.simpleName ?: "~")
                     }
+                        // A deck's page and its settings belong to the Decks tab.
+                        ?: NavSection.Decks.takeIf { routeName.contains("Route.Deck") }
                 val isFocus = routeName.contains("Route.Review") || routeName.contains("Route.Editor") || routeName.contains("Route.Quiz")
 
                 fun goHome() {
@@ -161,6 +164,8 @@ fun App(
                     current = currentSection,
                     showChrome = !isFocus,
                     onNavigate = { section ->
+                        // Tapping the tab you're in (say Decks while on a deck's page) goes back to that tab's top.
+                        if (section == currentSection && nav.popBackStack(section.route, inclusive = false)) return@AdaptiveScaffold
                         nav.navigate(section.route) {
                             popUpTo(Route.Today) { saveState = true }
                             launchSingleTop = true
@@ -199,14 +204,29 @@ fun App(
                                 onReview = { nav.navigate(Route.Review(it)) },
                                 onAddCards = { nav.navigate(Route.Editor(deckId = it)) },
                                 onSettings = { nav.navigate(Route.DeckSettings(it)) },
-                                onBrowse = { nav.navigate(Route.Browse) },
+                                onBrowse = { nav.navigate(Route.Browse()) },
+                                onOpen = { nav.navigate(Route.Deck(it)) },
                                 onAppSettings = { nav.navigate(Route.Settings) },
                             )
                         }
-                        composable<Route.Browse> {
+                        composable<Route.Deck> { entry ->
+                            val route = entry.toRoute<Route.Deck>()
+                            DeckScreen(
+                                deckId = route.deckId,
+                                onBack = { if (!nav.popBackStack()) goHome() },
+                                onReview = { id, layer -> nav.navigate(Route.Review(id, layer = layer)) },
+                                onAddCards = { nav.navigate(Route.Editor(deckId = it)) },
+                                onBrowse = { nav.navigate(Route.Browse(it)) },
+                                onSettings = { nav.navigate(Route.DeckSettings(it)) },
+                                onOpen = { nav.navigate(Route.Deck(it)) },
+                            )
+                        }
+                        composable<Route.Browse> { entry ->
+                            val browseRoute = entry.toRoute<Route.Browse>()
                             BrowseScreen(
                                 onEdit = { nav.navigate(Route.Editor(noteId = it)) },
                                 onAdd = { nav.navigate(Route.Editor()) },
+                                initialQuery = browseRoute.query,
                             )
                         }
                         composable<Route.Stats> { StatsScreen(onEdit = { nav.navigate(Route.Editor(noteId = it)) }) }
@@ -219,7 +239,7 @@ fun App(
                                 layer = route.layer,
                                 onExit = { if (!nav.popBackStack()) goHome() },
                                 onEdit = { nav.navigate(Route.Editor(noteId = it)) },
-                                onSearch = { nav.navigate(Route.Browse) },
+                                onSearch = { nav.navigate(Route.Browse()) },
                             )
                         }
                         composable<Route.Editor> { entry ->

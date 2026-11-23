@@ -13,16 +13,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,34 +34,51 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.mnemo.LocalAppGraph
-import app.mnemo.data.io.DeckTrash
+import app.mnemo.data.io.ApkgImporter
 import app.mnemo.platform.Prefs
-import app.mnemo.ui.components.DueBar
+import app.mnemo.platform.rememberFilePicker
 import app.mnemo.ui.components.EmptyState
 import app.mnemo.ui.components.IconActionButton
-import app.mnemo.ui.components.LegendDot
-import app.mnemo.ui.components.MasteryBar
+import app.mnemo.ui.components.LayerBar
+import app.mnemo.ui.components.Layers
+import app.mnemo.ui.components.MasteryRing
 import app.mnemo.ui.components.MnemoButton
 import app.mnemo.ui.components.MnemoIcons
 import app.mnemo.ui.components.MnemoTextField
-import app.mnemo.ui.components.Panel
-import app.mnemo.ui.components.ScreenHeader
+import app.mnemo.ui.components.dueSummary
 import app.mnemo.ui.nav.LocalWindowSize
 import app.mnemo.ui.nav.WindowSize
 import app.mnemo.ui.theme.MnemoColors
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+/** How the deck list is ordered. */
+private enum class DeckSort(
+    val label: String,
+) {
+    Due("Due first"),
+    Name("A–Z"),
+    Weakest("Weakest first"),
+}
 
 @Composable
 fun DeckListScreen(
@@ -69,6 +87,7 @@ fun DeckListScreen(
     onSettings: (Long) -> Unit,
     onBrowse: () -> Unit = {},
     onAppSettings: () -> Unit = {},
+    onOpen: (Long) -> Unit = {},
 ) {
     val graph = LocalAppGraph.current
     val vm: DecksViewModel = viewModel(key = "decks") { DecksViewModel(graph) }
@@ -77,102 +96,154 @@ fun DeckListScreen(
         onDispose { vm.setVisible(false) }
     }
     val state by vm.state.collectAsState()
+    val scope = rememberCoroutineScope()
     var showCreate by remember { mutableStateOf(false) }
-    var renaming by remember { mutableStateOf<DeckRow?>(null) }
-    var deleting by remember { mutableStateOf<DeckRow?>(null) }
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf<String?>(null) }
+    var importing by remember { mutableStateOf(false) }
+    var sort by remember { mutableStateOf(loadSort()) }
     val compact = LocalWindowSize.current == WindowSize.Compact
-    // Parents start folded (the English deck alone has ~60 packs); what you open is remembered.
+    // Cards start folded (the English deck alone has ~60 packs); what you open is remembered.
     var expanded by remember { mutableStateOf(loadExpanded()) }
-    val collapsed =
-        state.rows
-            .map { it.deck.id }
-            .filter { it !in expanded }
-            .toSet()
 
-    fun setExpanded(ids: Set<Long>) {
-        expanded = ids
-        saveExpanded(ids)
+    fun toggle(id: Long) {
+        expanded = if (id in expanded) expanded - id else expanded + id
+        saveExpanded(expanded)
     }
-    // Numbered packs show as tiles inside their section instead of ~100 rows of their own.
+
+    val pickApkg =
+        rememberFilePicker(listOf("apkg", "colpkg")) { file ->
+            if (file == null) return@rememberFilePicker
+            importing = true
+            message = "Importing ${file.name}…"
+            scope.launch {
+                message =
+                    runCatching { ApkgImporter.import(graph, file.bytes) }.fold(
+                        { r -> "Imported ${r.notes} notes and ${r.cards} cards into ${r.decks} decks" },
+                        { "Import failed: ${it.message}" },
+                    )
+                importing = false
+                vm.refresh()
+            }
+        }
+
+    // Numbered packs show as tiles inside their parent instead of ~100 rows of their own.
     val packs = remember(state.rows) { packsByParent(state.rows) }
     val packIds = remember(packs) { packs.values.flatten().mapTo(HashSet()) { it.deck.id } }
-    val visibleRows =
-        remember(state.rows, collapsed, packIds) {
-            val collapsedPaths = state.rows.filter { it.deck.id in collapsed }.map { it.deck.path + "::" }
-            state.rows.filter { r -> r.deck.id !in packIds && collapsedPaths.none { r.deck.path.startsWith(it) } }
+    val children = remember(state.rows, packIds) { state.rows.filter { it.deck.id !in packIds }.groupBy { it.deck.parentId } }
+    val top =
+        remember(state.rows, sort) {
+            val roots = state.rows.filter { it.deck.parentId == null }
+            when (sort) {
+                DeckSort.Due -> roots.sortedWith(compareByDescending<DeckRow> { it.due.total }.thenBy { it.deck.name.lowercase() })
+                DeckSort.Name -> roots.sortedBy { it.deck.name.lowercase() }
+                // Not-started decks last: they are new, not weak.
+                DeckSort.Weakest -> roots.sortedBy { if (it.mastery > 0) it.mastery else 2.0 }
+            }
         }
-    val parentPaths =
-        state.rows
-            .mapNotNull { r ->
-                r.deck.path
-                    .substringBeforeLast("::", "")
-                    .ifEmpty { null }
-            }.toSet()
+    val matches =
+        remember(state.rows, query) {
+            val q = query.trim()
+            if (q.isEmpty()) emptyList() else state.rows.filter { it.deck.path.contains(q, ignoreCase = true) }
+        }
 
     val deleted by vm.deleted.collectAsState()
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = if (compact) 20.dp else 40.dp, vertical = 28.dp),
+            modifier = Modifier.fillMaxSize().widthIn(max = 900.dp),
+            contentPadding = PaddingValues(horizontal = if (compact) 20.dp else 40.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item {
-                val subtitle =
-                    "${state.rows.size - packIds.size} decks" + if (packIds.isNotEmpty()) " · ${packIds.size} packs" else ""
-                ScreenHeader(title = "Decks", subtitle = subtitle) {
-                    MnemoButton("New deck", onClick = { showCreate = true }, icon = MnemoIcons.Plus, primary = true)
-                    if (parentPaths.isNotEmpty()) {
-                        val allCollapsed = state.rows.filter { it.deck.path in parentPaths }.all { it.deck.id in collapsed }
-                        MnemoButton(
-                            if (allCollapsed) "Show subdecks" else "Hide subdecks",
-                            onClick = {
-                                setExpanded(
-                                    if (allCollapsed) {
-                                        state.rows
-                                            .filter { it.deck.path in parentPaths }
-                                            .map { it.deck.id }
-                                            .toSet()
-                                    } else {
-                                        emptySet()
-                                    },
-                                )
-                            },
+            item(key = "header") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Decks", style = MaterialTheme.typography.displaySmall, color = MnemoColors.text)
+                        val subs = state.rows.size - top.size
+                        Text(
+                            "${top.size} decks" + (if (subs > 0) " · $subs sub-decks" else "") +
+                                " · ${top.sumOf { it.cardCount }} cards",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MnemoColors.text2,
                         )
                     }
-                    // Phones have no sidebar, so Browse and Settings are reached from here.
-                    if (compact) {
-                        MnemoButton("Browse", onClick = onBrowse, icon = MnemoIcons.Search)
-                        MnemoButton("Settings", onClick = onAppSettings, icon = MnemoIcons.Settings)
-                    }
+                    IconActionButton(
+                        if (searching) MnemoIcons.Close else MnemoIcons.Search,
+                        if (searching) "Close search" else "Search decks",
+                        onClick = {
+                            searching = !searching
+                            if (!searching) query = ""
+                        },
+                        tint = MnemoColors.text,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    IconActionButton(MnemoIcons.Settings, "Settings", onClick = onAppSettings, tint = MnemoColors.text)
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(6.dp))
             }
-            if (!state.loading && state.rows.isEmpty()) {
-                item {
-                    EmptyState(
-                        title = "No decks yet",
-                        body = "Create one, then add cards or import a CSV.",
-                        action = { MnemoButton("Create a deck", onClick = { showCreate = true }, primary = true) },
+            if (searching) {
+                item(key = "search") {
+                    MnemoTextField(value = query, onValueChange = { query = it }, singleLine = true, placeholder = "Find a deck")
+                }
+                items(matches, key = { "m${it.deck.id}" }) { row ->
+                    SubDeckRow(
+                        name = row.deck.path.replace("::", " › "),
+                        due = row.due.total,
+                        indent = 0,
+                        onOpen = { onOpen(row.deck.id) },
+                        onStudy = { onReview(row.deck.id) },
+                        modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(MnemoColors.surface2).padding(start = 14.dp),
                     )
                 }
-            }
-            items(visibleRows, key = { it.deck.id }) { row ->
-                Column {
-                    DeckRowItem(
+                if (query.isNotBlank() && matches.isEmpty()) {
+                    item(key = "nomatch") {
+                        Text("No deck matches “$query”.", style = MaterialTheme.typography.bodyMedium, color = MnemoColors.text2)
+                    }
+                }
+            } else {
+                item(key = "sort") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DeckSort.entries.forEach { s ->
+                            SortChip(s.label, selected = s == sort) {
+                                sort = s
+                                Prefs.set(Prefs.DECKS_SORT, s.name)
+                            }
+                        }
+                    }
+                }
+                if (!state.loading && state.rows.isEmpty()) {
+                    item(key = "empty") {
+                        EmptyState(
+                            title = "No decks yet",
+                            body = "Create one, then add cards or import an Anki deck.",
+                            action = { MnemoButton("Create a deck", onClick = { showCreate = true }, primary = true) },
+                        )
+                    }
+                }
+                items(top, key = { it.deck.id }) { row ->
+                    DeckCard(
                         row = row,
-                        hasChildren = row.deck.path in parentPaths,
-                        collapsed = row.deck.id in collapsed,
-                        onToggle = { setExpanded(if (row.deck.id in expanded) expanded - row.deck.id else expanded + row.deck.id) },
-                        onReview = { onReview(row.deck.id) },
-                        onAddCards = { onAddCards(row.deck.id) },
-                        onSettings = { onSettings(row.deck.id) },
-                        onRename = { renaming = row },
-                        onDelete = { deleting = row },
+                        children = children[row.deck.id].orEmpty(),
+                        packs = packs[row.deck.id].orEmpty(),
+                        subCount = children[row.deck.id].orEmpty().size + packs[row.deck.id].orEmpty().size,
+                        open = row.deck.id in expanded,
+                        onToggle = { toggle(row.deck.id) },
+                        onOpen = onOpen,
+                        onReview = onReview,
                     )
-                    val rowPacks = packs[row.deck.id]
-                    if (rowPacks != null && row.deck.id !in collapsed) {
-                        PackGrid(rowPacks, depth = row.depth + 1, onReview = { onReview(it.deck.id) })
+                }
+                item(key = "add") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        DashedTile("New deck", MnemoIcons.Plus, Modifier.weight(1f)) { showCreate = true }
+                        DashedTile(if (importing) "Importing…" else "Import .apkg", MnemoIcons.Import, Modifier.weight(1f)) {
+                            if (!importing) pickApkg()
+                        }
                     }
+                    message?.let {
+                        Spacer(Modifier.height(10.dp))
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MnemoColors.success)
+                    }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }
@@ -203,137 +274,262 @@ fun DeckListScreen(
             },
         )
     }
-    renaming?.let { row ->
-        NameDialog(
-            title = "Rename deck",
-            hint = null,
-            initial = row.deck.name,
-            confirm = "Rename",
-            onDismiss = { renaming = null },
-            onConfirm = {
-                vm.rename(row.deck.id, it)
-                renaming = null
-            },
+}
+
+/** One top-level deck: mastery ring, what's due, a start button, and its sub-decks when opened. */
+@Composable
+private fun DeckCard(
+    row: DeckRow,
+    children: List<DeckRow>,
+    packs: List<DeckRow>,
+    subCount: Int,
+    open: Boolean,
+    onToggle: () -> Unit,
+    onOpen: (Long) -> Unit,
+    onReview: (Long) -> Unit,
+) {
+    val hasDue = row.due.total > 0
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (hasDue) MnemoColors.surface2 else MnemoColors.surface)
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(role = Role.Button) { onOpen(row.deck.id) }
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MasteryRing(row.mastery, Layers.deckColor(row.deck.id))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        row.deck.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (hasDue) MnemoColors.text else MnemoColors.text2,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        "${row.cardCount} cards · " +
+                            if (row.mastery > 0) "${(row.mastery * 100).toInt()}% mastered" else "not started",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MnemoColors.text2,
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            if (hasDue) {
+                StudyButton(row.due.total, "Study ${row.due.total} cards in ${row.deck.name}") { onReview(row.deck.id) }
+            } else {
+                CaughtUp()
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        LayerBar(row.due)
+        Row(Modifier.heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                dueSummary(row.due),
+                style = MaterialTheme.typography.labelMedium,
+                color = MnemoColors.text2,
+                modifier = Modifier.weight(1f),
+            )
+            if (subCount > 0) {
+                Row(
+                    Modifier
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable(role = Role.Button, onClick = onToggle)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        if (subCount == 1) "1 sub-deck" else "$subCount sub-decks",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MnemoColors.text,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        MnemoIcons.Chevron,
+                        contentDescription = if (open) "Hide sub-decks" else "Show sub-decks",
+                        tint = MnemoColors.text,
+                        modifier = Modifier.size(14.dp).rotate(if (open) 270f else 90f),
+                    )
+                }
+            }
+        }
+        if (open && subCount > 0) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MnemoColors.outline))
+            Spacer(Modifier.height(4.dp))
+            children.forEach { c ->
+                SubDeckRow(
+                    name = c.deck.name,
+                    due = c.due.total,
+                    indent = 0,
+                    dot = Layers.deckColor(row.deck.id),
+                    onOpen = { onOpen(c.deck.id) },
+                    onStudy = { onReview(c.deck.id) },
+                )
+            }
+            if (packs.isNotEmpty()) PackGrid(packs, depth = 0, onReview = { onReview(it.deck.id) })
+        }
+    }
+}
+
+/** A sub-deck line: name (opens its page), due count, and a start arrow. */
+@Composable
+internal fun SubDeckRow(
+    name: String,
+    due: Int,
+    indent: Int,
+    onOpen: () -> Unit,
+    onStudy: () -> Unit,
+    modifier: Modifier = Modifier,
+    dot: androidx.compose.ui.graphics.Color? = null,
+) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = (indent * 18).dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (dot != null) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(dot))
+            Spacer(Modifier.width(10.dp))
+        }
+        Text(
+            name,
+            style = MaterialTheme.typography.titleSmall,
+            color = MnemoColors.text,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(role = Role.Button, onClick = onOpen)
+                    .padding(vertical = 12.dp),
+        )
+        Text(
+            if (due > 0) "$due due" else "none due",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (due > 0) MnemoColors.coral else MnemoColors.text3,
+        )
+        IconActionButton(
+            MnemoIcons.ArrowRight,
+            "Study $name",
+            onClick = onStudy,
+            background = androidx.compose.ui.graphics.Color.Transparent,
+            tint = if (due > 0) MnemoColors.text else MnemoColors.text3,
         )
     }
-    deleting?.let { row ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            containerColor = MnemoColors.surface2,
-            title = { Text("Delete “${row.deck.path}”?", color = MnemoColors.text) },
-            text = {
-                Text(
-                    "This deletes ${row.cardCount} cards and their review history. You can undo it right after, or bring it back from Settings › Recently deleted for ${DeckTrash.KEEP_DAYS} days.",
-                    color = MnemoColors.text2,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.delete(row.deck.id)
-                    deleting = null
-                }) { Text("Delete", color = MnemoColors.danger) }
-            },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel", color = MnemoColors.text2) } },
+}
+
+/** The coral start button with the number of cards due. */
+@Composable
+internal fun StudyButton(
+    count: Int,
+    description: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .height(44.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MnemoColors.coral)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description }
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("$count", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MnemoColors.onCoral)
+        Spacer(Modifier.width(8.dp))
+        Icon(MnemoIcons.ArrowRight, contentDescription = null, tint = MnemoColors.onCoral, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+private fun CaughtUp() {
+    Row(
+        Modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(MnemoColors.surface3)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            MnemoIcons.Check,
+            contentDescription = null,
+            tint = if (MnemoColors.isDark) MnemoColors.lime else MnemoColors.success,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            "All caught up",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (MnemoColors.isDark) MnemoColors.lime else MnemoColors.success,
         )
     }
 }
 
 @Composable
-private fun DeckRowItem(
-    row: DeckRow,
-    hasChildren: Boolean,
-    collapsed: Boolean,
-    onToggle: () -> Unit,
-    onReview: () -> Unit,
-    onAddCards: () -> Unit,
-    onSettings: () -> Unit,
-    onRename: () -> Unit,
-    onDelete: () -> Unit,
+private fun SortChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
 ) {
-    var menu by remember { mutableStateOf(false) }
-    val tile = listOf(MnemoColors.surface, MnemoColors.surface, MnemoColors.surface)[row.depth.coerceAtMost(2)]
-    Panel(
-        modifier = Modifier.fillMaxWidth().padding(start = (row.depth * 20).dp),
-        color = tile,
-        padding = PaddingValues(18.dp),
-        onClick = onReview,
+    Box(
+        Modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (selected) MnemoColors.text else MnemoColors.surface2)
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (hasChildren) {
-                IconActionButton(
-                    MnemoIcons.Chevron,
-                    if (collapsed) "Show subdecks" else "Hide subdecks",
-                    onClick = onToggle,
-                    modifier = Modifier.rotate(if (collapsed) 0f else 90f),
-                    size = 40.dp,
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (selected) MnemoColors.background else MnemoColors.text2,
+        )
+    }
+}
+
+@Composable
+private fun DashedTile(
+    label: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val dash = MnemoColors.outlineStrong
+    Row(
+        modifier
+            .height(64.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .drawBehind {
+                drawRoundRect(
+                    color = dash,
+                    cornerRadius = CornerRadius(22.dp.toPx()),
+                    style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx()))),
                 )
-                Spacer(Modifier.width(8.dp))
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    row.deck.name,
-                    style =
-                        if (LocalWindowSize.current ==
-                            WindowSize.Compact
-                        ) {
-                            MaterialTheme.typography.titleMedium
-                        } else {
-                            MaterialTheme.typography.titleLarge
-                        },
-                    color = MnemoColors.text,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    "${row.cardCount} cards · ${row.due.total} due",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MnemoColors.text2,
-                )
-            }
-            if (row.due.total > 0) {
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(MnemoColors.lime)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                ) {
-                    Text("${row.due.total}", style = MaterialTheme.typography.labelLarge, color = MnemoColors.onLime)
-                }
-                Spacer(Modifier.width(8.dp))
-            }
-            Box {
-                IconActionButton(MnemoIcons.More, "Deck menu", onClick = { menu = true }, size = 40.dp)
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Add cards") }, onClick = {
-                        menu = false
-                        onAddCards()
-                    })
-                    DropdownMenuItem(text = { Text("Deck settings") }, onClick = {
-                        menu = false
-                        onSettings()
-                    })
-                    DropdownMenuItem(text = { Text("Rename") }, onClick = {
-                        menu = false
-                        onRename()
-                    })
-                    DropdownMenuItem(text = { Text("Delete", color = MnemoColors.danger) }, onClick = {
-                        menu = false
-                        onDelete()
-                    })
-                }
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        DueBar(row.due.new, row.due.learning, row.due.review)
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            LegendDot(MnemoColors.stateNew, "New", "${row.due.new}")
-            LegendDot(MnemoColors.stateLearning, "Learning", "${row.due.learning}")
-            LegendDot(MnemoColors.stateReview, "Review", "${row.due.review}")
-            Spacer(Modifier.weight(1f))
-            MasteryBar(row.mastery, modifier = Modifier.widthIn(max = 180.dp))
-        }
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = MnemoColors.text2, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MnemoColors.text2)
     }
 }
 
@@ -369,27 +565,7 @@ fun NameDialog(
     )
 }
 
-/** Small row used in sidebars: a deck name with its due count. */
-@Composable
-fun DeckMiniRow(
-    name: String,
-    due: Int,
-    depth: Int,
-    onClick: () -> Unit,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(32.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = (10 + depth * 14).dp, end = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(name, style = MaterialTheme.typography.bodyMedium, color = MnemoColors.text, modifier = Modifier.weight(1f))
-        if (due > 0) Text("$due", style = MaterialTheme.typography.labelMedium, color = MnemoColors.text2)
-    }
-}
+private fun loadSort(): DeckSort = DeckSort.entries.firstOrNull { it.name == Prefs.get(Prefs.DECKS_SORT) } ?: DeckSort.Due
 
 private fun loadExpanded(): Set<Long> =
     Prefs
@@ -433,7 +609,7 @@ private fun UndoBar(
 /** A section's packs as a grid of numbered tiles; tapping one studies that pack. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PackGrid(
+internal fun PackGrid(
     packs: List<DeckRow>,
     depth: Int,
     onReview: (DeckRow) -> Unit,
@@ -450,7 +626,7 @@ private fun PackGrid(
                     Modifier
                         .width(72.dp)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (due > 0) MnemoColors.lime else MnemoColors.surface)
+                        .background(if (due > 0) MnemoColors.lime else MnemoColors.surface3)
                         .clickable(role = Role.Button) { onReview(p) }
                         .semantics { contentDescription = "${p.deck.name}: ${p.cardCount} cards, $due due" }
                         .padding(vertical = 10.dp),

@@ -63,6 +63,7 @@ object Prefs {
     const val GERMAN_A0_DECK = "seed.german.a0"
     const val GERMAN_A1_DECK = "seed.german.a1"
     const val DECKS_EXPANDED = "decks.expanded"
+    const val DECKS_SORT = "decks.sort"
     const val GRAPH_HIDDEN = "graph.hidden"
     const val FSRS_PARAMS = "fsrs.params"
     const val DAY_START_HOUR = "day.start.hour"

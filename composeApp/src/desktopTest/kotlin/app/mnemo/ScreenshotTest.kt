@@ -16,6 +16,7 @@ import app.mnemo.domain.review.ReviewSession
 import app.mnemo.platform.Clock
 import app.mnemo.ui.browse.BrowseScreen
 import app.mnemo.ui.decks.DeckListScreen
+import app.mnemo.ui.decks.DeckScreen
 import app.mnemo.ui.editor.NoteEditorScreen
 import app.mnemo.ui.nav.AdaptiveScaffold
 import app.mnemo.ui.nav.NavSection
@@ -208,6 +209,14 @@ class ScreenshotTest {
             val tag = if (w > 600) "desktop" else "phone"
             render("today-$tag", w, h, g) { Shell(NavSection.Today) { TodayScreen({}, {}, {}, {}) } }
             render("decks-$tag", w, h, g) { Shell(NavSection.Decks) { DeckListScreen({}, {}, {}) } }
+            val german =
+                runBlocking {
+                    g.decks
+                        .all()
+                        .first { it.path == "German" }
+                        .id
+                }
+            render("deck-$tag", w, h, g) { Shell(NavSection.Decks) { DeckScreen(german, {}, { _, _ -> }, {}, {}, {}, {}) } }
             render("browse-$tag", w, h, g) { Shell(NavSection.Browse) { BrowseScreen({}, {}) } }
             render("stats-$tag", w, h, g) { Shell(NavSection.Stats) { StatsScreen({}) } }
             render("settings-$tag", w, h, g) { Shell(null) { SettingsScreen() } }

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -46,16 +45,14 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.mnemo.LocalAppGraph
 import app.mnemo.ui.components.EmptyState
 import app.mnemo.ui.components.Eyebrow
+import app.mnemo.ui.components.LayeredHero
 import app.mnemo.ui.components.MasteryBar
 import app.mnemo.ui.components.MnemoButton
 import app.mnemo.ui.components.MnemoIcons
@@ -111,7 +108,10 @@ fun TodayScreen(
             // Hero: due now, with one tab per layer (review / learning / new) stacked above it.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 LayeredHero(
-                    state = state,
+                    due = state.due,
+                    minutes = state.estimatedMinutes,
+                    heading = "Due now",
+                    startLabel = "Start review",
                     chosen = layer,
                     onSelect = { layer = it },
                     onStart = { picked -> if (picked == null) onReview(null) else onReviewLayer(picked) },
@@ -358,119 +358,6 @@ private fun StreakPanel(state: TodayUiState) {
     }
 }
 
-/** The tab fill for each layer; amber stays the same in both themes so the dark label on it reads. */
-private val LayerAmber = Color(0xFFFFC247)
-
-private class Layer(
-    val id: String,
-    val label: String,
-    val word: String,
-    val count: Int,
-    val color: Color,
-    val inset: Int,
-)
-
-/**
- * "Due now" with its layers: REVIEW, LEARNING and NEW tabs peek out above the card like stacked folders.
- * Tap one to study just that type (the card changes to match), tap it again to go back to everything.
- */
-@Composable
-private fun LayeredHero(
-    state: TodayUiState,
-    chosen: String?,
-    onSelect: (String?) -> Unit,
-    onStart: (String?) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val layers =
-        listOf(
-            Layer("review", "REVIEW", "review", state.due.review, MnemoColors.sky, 18),
-            Layer("learning", "LEARNING", "learning", state.due.learning, MnemoColors.lime, 12),
-            Layer("new", "NEW", "new", state.due.new, LayerAmber, 6),
-        )
-    val current = layers.firstOrNull { it.id == chosen }
-    val count = current?.count ?: state.due.total
-    // The estimate is for everything due; a layer takes its share of it.
-    val minutes =
-        if (current == null || state.due.total == 0) {
-            state.estimatedMinutes
-        } else {
-            (state.estimatedMinutes * current.count / state.due.total).coerceAtLeast(if (current.count > 0) 1 else 0)
-        }
-    Column(modifier) {
-        layers.forEach { t ->
-            val on = t.id == chosen
-            // 58dp tall, but only the top 38dp takes up room: the next tab (or the card) covers the rest.
-            Box(
-                Modifier
-                    .padding(horizontal = t.inset.dp)
-                    .fillMaxWidth()
-                    .height(38.dp)
-                    .wrapContentHeight(align = Alignment.Top, unbounded = true)
-                    .height(58.dp)
-                    .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
-                    .background(t.color)
-                    .semantics { selected = on }
-                    .clickable(role = Role.Tab) { onSelect(if (on) null else t.id) }
-                    .padding(horizontal = 18.dp),
-            ) {
-                Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        t.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.9.sp,
-                        color = MnemoColors.onCoral,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text("${t.count} cards", style = MaterialTheme.typography.labelLarge, color = MnemoColors.onCoral)
-                    if (on) {
-                        Spacer(Modifier.width(10.dp))
-                        Box(Modifier.size(22.dp).clip(CircleShape).background(MnemoColors.onCoral), contentAlignment = Alignment.Center) {
-                            Icon(MnemoIcons.Check, contentDescription = "Selected", tint = Color.White, modifier = Modifier.size(14.dp))
-                        }
-                    }
-                }
-            }
-        }
-        Panel(
-            color = MnemoColors.coral,
-            radius = 26.dp,
-            padding = PaddingValues(20.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow(if (current == null) "Due now" else "${current.label} only", color = MnemoColors.onCoral)
-                Spacer(Modifier.weight(1f))
-                Pill("about $minutes min")
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text("$count", style = MaterialTheme.typography.displayLarge, color = MnemoColors.onCoral)
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    "cards",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MnemoColors.onCoral,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                if (current == null) "Tap a layer to study just that type" else "Tap the layer again to study everything",
-                style = MaterialTheme.typography.labelLarge,
-                color = MnemoColors.onCoral,
-            )
-            Spacer(Modifier.height(12.dp))
-            DarkButton(
-                text = if (current == null) "Start review" else "Study ${current.count} ${current.word} cards",
-                onClick = { onStart(current?.id) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = count > 0,
-            )
-        }
-    }
-}
-
 /** Phone decks: a swipeable strip of small tiles, then an "All decks" tile. */
 @Composable
 private fun DeckStrip(
@@ -479,7 +366,6 @@ private fun DeckStrip(
     onOpen: (Long) -> Unit,
     onAll: () -> Unit,
 ) {
-    val bars = listOf(MnemoColors.sky, MnemoColors.lime, MnemoColors.lavender)
     val bleed = with(androidx.compose.ui.platform.LocalDensity.current) { sidePad.roundToPx() }
     // Runs edge to edge: the screen's side padding becomes the strip's own content padding.
     LazyRow(
@@ -503,7 +389,17 @@ private fun DeckStrip(
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(width = 8.dp, height = 24.dp).clip(RoundedCornerShape(999.dp)).background(bars[i % bars.size]))
+                    Box(
+                        Modifier
+                            .size(
+                                width = 8.dp,
+                                height = 24.dp,
+                            ).clip(RoundedCornerShape(999.dp))
+                            .background(
+                                app.mnemo.ui.components.Layers
+                                    .deckColor(d.deck.id),
+                            ),
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         d.deck.name,
@@ -577,42 +473,6 @@ private fun ForecastBars(forecast: List<Int>) {
         Text("today", style = MaterialTheme.typography.labelSmall, color = MnemoColors.text3)
         Text("+15 d", style = MaterialTheme.typography.labelSmall, color = MnemoColors.text3)
         Text("+30 d", style = MaterialTheme.typography.labelSmall, color = MnemoColors.text3)
-    }
-}
-
-@Composable
-private fun Pill(text: String) {
-    Box(
-        Modifier
-            .clip(
-                RoundedCornerShape(999.dp),
-            ).background(MnemoColors.onCoral.copy(alpha = 0.16f))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-    ) {
-        Text(text, style = MaterialTheme.typography.labelMedium, color = MnemoColors.onCoral)
-    }
-}
-
-@Composable
-private fun DarkButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    Row(
-        modifier
-            .height(56.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(if (enabled) MnemoColors.onCoral else MnemoColors.onCoral.copy(alpha = 0.4f))
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Text(text, style = MaterialTheme.typography.titleMedium, color = Color(0xFFF2F3F7))
-        Spacer(Modifier.width(10.dp))
-        Icon(MnemoIcons.ArrowRight, contentDescription = null, tint = Color(0xFFF2F3F7), modifier = Modifier.size(18.dp))
     }
 }
 

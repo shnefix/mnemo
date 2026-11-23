@@ -140,21 +140,21 @@ class OnDeviceDesignAuditTest {
         lint("07-editor")
         rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         settle()
-        // Browse and Settings are reached from the Decks header on phones (not the Browse tab).
-        for ((i, name) in listOf("Browse", "Settings").withIndex()) {
-            tap("Decks")
-            rule.onAllNodes(hasText(name) and !hasRole(Role.Tab)).onFirst().performClick()
+        // Settings is reached from the Decks header on phones.
+        tap("Decks")
+        rule.onNodeWithContentDescription("Settings").performClick()
+        settle()
+        lint("09-settings")
+        rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        settle()
+        // A deck's own page (tap a deck's name), then its settings from there.
+        val deckCard = hasText(" cards · ", substring = true) and hasRole(Role.Button)
+        if (exists(deckCard)) {
+            rule.onAllNodes(deckCard).onFirst().performClick()
             settle()
-            lint("0${8 + i}-${name.lowercase()}")
-            rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            lint("10-deck-page")
+            rule.onNodeWithText("Deck settings").performScrollTo().performClick()
             settle()
-        }
-        val settings =
-            SemanticsMatcher("settings button") {
-                it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { d -> d.contains("setting", true) } == true
-            }
-        if (exists(settings)) {
-            rule.onAllNodes(settings).onFirst().performClick()
             lint("10-deck-settings")
         }
         if (problems.isNotEmpty()) fail("Design audit found ${problems.size} problem(s):\n" + problems.distinct().joinToString("\n"))
@@ -190,20 +190,18 @@ class OnDeviceDesignAuditTest {
             rule.waitUntil(15_000) { exists(hasText(deck)) }
             lint("11-decks-with-data")
 
-            // Deck settings via the menu on this deck's row (the first composed row may be scrolled out of view).
-            val row = rule.onNode(hasText(deck)).fetchSemanticsNode().boundsInRoot
-            val menus = rule.onAllNodes(hasContentDescription("Deck menu"))
-            val onRow = menus.fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.top <= row.bottom && it.boundsInRoot.bottom >= row.top }
-            check(onRow >= 0) { "No menu button on the row of $deck" }
-            menus[onRow].performClick()
+            // The deck's own page (tap its name), then Deck settings from there.
+            rule.onNode(hasText(deck) and hasRole(Role.Button)).performClick()
+            rule.waitUntil(15_000) { exists(hasText("Study $deck") and hasRole(Role.Button)) }
+            lint("12-deck-page")
+            rule.onNodeWithText("Deck settings").performScrollTo().performClick()
             settle()
-            rule.onNodeWithText("Deck settings").performClick()
             lint("12-deck-settings")
             rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             settle()
 
-            // Review: question, answer, then end the session.
-            rule.onAllNodes(hasText(deck)).onFirst().performClick()
+            // Review from the deck page: question, answer, then end the session.
+            rule.onNode(hasText("Study $deck") and hasRole(Role.Button)).performClick()
             rule.waitUntil(15_000) { exists(hasText("Show answer")) }
             lint("13-review-question")
             rule.onNodeWithText("Show answer").performClick()
@@ -218,36 +216,32 @@ class OnDeviceDesignAuditTest {
     }
 
     /**
-     * Deletes every deck called [name] (this run's and any left by an earlier failed run) through
-     * the menu on that deck's own row. Never the first row's menu: that is another deck (the built-in English one).
+     * Deletes every deck called [name] (this run's and any left by an earlier failed run) from that
+     * deck's own page: tap its name in the list, then ⋮ › Delete.
      */
     private fun deleteDeck(name: String) {
         rule.waitUntil(15_000) { exists(hasContentDescription("Create cards")) }
         tap("Decks")
+        val card = hasText(name) and hasText(" cards · ", substring = true) and hasRole(Role.Button)
         var rounds = 0
         while (rounds++ < 5) {
             val found =
                 runCatching {
                     rule.waitUntil(15_000) {
-                        runCatching { rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name)) }.isSuccess
+                        runCatching { rule.onNode(hasScrollToNodeAction()).performScrollToNode(card) }.isSuccess
                     }
                 }.isSuccess
             if (!found) break
-            val row =
-                rule
-                    .onAllNodes(hasText(name))
-                    .onFirst()
-                    .fetchSemanticsNode()
-                    .boundsInRoot
-            val menus = rule.onAllNodes(hasContentDescription("Deck menu"))
-            val onRow = menus.fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.top <= row.bottom && it.boundsInRoot.bottom >= row.top }
-            check(onRow >= 0) { "No menu button on the row of $name" }
-            menus[onRow].performClick()
+            rule.onAllNodes(card).onFirst().performClick()
+            rule.waitUntil(15_000) { exists(hasContentDescription("Rename or delete deck")) }
+            rule.onNodeWithContentDescription("Rename or delete deck").performClick()
             rule.waitUntil(15_000) { exists(hasText("Delete")) }
             rule.onNodeWithText("Delete").performClick()
             rule.waitUntil(15_000) { exists(hasText("Delete “$name", substring = true) and hasAnyAncestor(isDialog())) }
             rule.onNode(hasText("Delete") and hasAnyAncestor(isDialog())).performClick()
             rule.waitUntil(15_000) { !exists(isDialog()) }
+            // The page closes itself once its deck is gone.
+            rule.waitUntil(15_000) { !exists(hasContentDescription("Rename or delete deck")) }
         }
     }
 }
