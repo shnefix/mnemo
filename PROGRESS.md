@@ -1,5 +1,18 @@
 # Progress
 
+## Done — AI & ML deck and English photos (24 Nov 2026)
+
+- **AI & ML deck** (`data/seed/AiDeck.kt`, `AiDeckContent.kt`): 11 sections, about 370 cards —
+  history (with "put in order" cards), people, landmark papers, failures & ethics, confusable pairs,
+  formulas (cloze), diagrams (image occlusion over 11 drawn diagrams, `scripts/seed/ai_diagrams.py`),
+  what's wrong?, numbers, code (PyTorch / scikit-learn / NumPy / Hugging Face) and tools. Cards carry
+  `ml-<topic>` tags; `AiDeck.syncGraph` builds an 18-topic concept map with prerequisites.
+- **English "9. Name it (photos)"** (English deck version 8): 102 real photos of everyday things in
+  seven categories, from Wikimedia Commons (free licences, credited on each card and in CREDITS.md;
+  `scripts/seed/english_photos.py`). Bundled pictures are copied to the media folder on install
+  (`SeedMedia`).
+- Tests: `AiDeckTest`.
+
 ## Done — Anki parity (24 Nov 2026)
 
 - **Bury siblings**: one card per note a day for new cards and reviews (deck settings, on by

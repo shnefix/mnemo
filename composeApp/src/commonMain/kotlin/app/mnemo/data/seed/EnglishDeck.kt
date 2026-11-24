@@ -23,7 +23,7 @@ object EnglishDeck {
     const val ROOT = "English (B1–B2)"
 
     /** Bump when the content changes; older installs are updated on the next launch. */
-    const val VERSION = 7
+    const val VERSION = 8
 
     data class Section(
         val name: String,
@@ -45,6 +45,27 @@ object EnglishDeck {
 
     /** Version in which [pairs] and [pronunciation] were added: older installs get them on update. */
     private const val MORE_SINCE = 7
+
+    /** Added in version 8: real photos of everyday things, sorted by where you find them. */
+    val photos = Section("9. Name it (photos)", 3, "photo")
+
+    /** Version in which [photos] was added: older installs get it on update. */
+    private const val PHOTOS_SINCE = 8
+
+    /** Prefix of the photos in the media folder. */
+    internal const val PHOTO_PREFIX = "mnemo-en-"
+
+    /** The categories of [photos]: sub-deck name, label of its packs, content. */
+    private val photoCategories =
+        listOf(
+            Triple("1. Kitchen", "Kitchen", EnglishPhotoContent.KITCHEN),
+            Triple("2. Bathroom", "Bathroom", EnglishPhotoContent.BATHROOM),
+            Triple("3. Around the house", "House", EnglishPhotoContent.HOUSE),
+            Triple("4. Tools & desk", "Tools", EnglishPhotoContent.TOOLS),
+            Triple("5. Street & town", "Street", EnglishPhotoContent.STREET),
+            Triple("6. Shopping", "Shopping", EnglishPhotoContent.SHOP),
+            Triple("7. Clothes", "Clothes", EnglishPhotoContent.CLOTHES),
+        )
 
     /** Spoken, in Speak mode: the phrases that keep a real conversation going. */
     val talk = Section("7. Keep the conversation going", 3, "conversation")
@@ -211,6 +232,12 @@ object EnglishDeck {
             )
         }
         packs(pronunciation, "Sounds", pronunciationCards(), NoteKind.Basic)
+        // Added in version 8: the photos are copied into the media folder first.
+        SeedMedia.install("en", photoKeys().map { "$it.webp" }, PHOTO_PREFIX)
+        if (from < PHOTOS_SINCE) seed.alwaysCreate(photoCards())
+        photoCategories.forEach { (name, label, text) ->
+            seed.packs("${photos.name}::$name", photos.newPerDay, label, photoCards(text), NoteKind.Basic, listOf("english", photos.tag))
+        }
         val changed = seed.commit() + retired.size
         retired.forEach { graph.notes.delete(it.id) }
         // Packs the move left empty.
@@ -325,6 +352,25 @@ object EnglishDeck {
                     "Back" to "${gapped.replace("___", "**$answer**")}\n\n*$rule*\n\n${quote(r.drop(4))}",
                 ),
             )
+        }
+
+    /** Keys of the photos that ship with the app (those with a credit). */
+    internal fun photoKeys(): List<String> =
+        photoCategories.flatMap { rows(it.third) }.map { it[0] }.filter { it in EnglishPhotoCredits.byKey }
+
+    /** photo key | word | what it is | example | example (all categories when no [text] is given) */
+    internal fun photoCards(text: String? = null): List<Card> =
+        (text?.let { listOf(it) } ?: photoCategories.map { it.third }).flatMap { content ->
+            rows(content).mapNotNull { r ->
+                val (key, word, meaning) = r
+                val credit = EnglishPhotoCredits.byKey[key] ?: return@mapNotNull null
+                Card(
+                    mapOf(
+                        "Front" to "![]($PHOTO_PREFIX$key.webp)\n\n$THINGS_QUESTION",
+                        "Back" to "**$word**\n\n$meaning\n\n${quote(r.drop(3))}\n\n*Photo: $credit*",
+                    ),
+                )
+            }
         }
 
     /** word | how it sounds | tip | example */

@@ -42,6 +42,11 @@ real app. Gradle uninstalls it after `make phone-test`.
 ## Using it
 
 - **Today**: what's due, streak, retention, decks with mastery, 30-day forecast.
+- **Built-in decks**: English (B1–B2, with real photos of everyday things in *9. Name it
+  (photos)*), English B2 practice, German A0/A1, and **AI & ML**: history, people, landmark papers,
+  failures and ethics, confusable pairs, formulas, diagrams (image occlusion), "what's wrong?",
+  numbers, code and tools, with its topics as a concept map on the Graph. Photo credits are in
+  [CREDITS.md](CREDITS.md); `scripts/seed/` rebuilds the diagrams and photos.
 - **Decks**: `New deck` accepts `German::Vocab::A1` to nest. Each deck has FSRS settings
   (desired retention, daily limits, learning steps, leech threshold, review mode, new-card order,
   burying siblings, load balancing and easy days) and can share them through a named preset.

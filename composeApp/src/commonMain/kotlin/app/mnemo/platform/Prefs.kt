@@ -62,6 +62,7 @@ object Prefs {
     const val ENGLISH_B2_DECK = "seed.english.b2"
     const val GERMAN_A0_DECK = "seed.german.a0"
     const val GERMAN_A1_DECK = "seed.german.a1"
+    const val AI_DECK = "seed.ai"
     const val DECKS_EXPANDED = "decks.expanded"
     const val DECKS_SORT = "decks.sort"
     const val GRAPH_HIDDEN = "graph.hidden"

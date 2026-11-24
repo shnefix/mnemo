@@ -19,6 +19,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.mnemo.data.io.AutoBackup
+import app.mnemo.data.seed.AiDeck
 import app.mnemo.data.seed.EnglishB2Deck
 import app.mnemo.data.seed.EnglishDeck
 import app.mnemo.data.seed.GermanA0Deck
@@ -84,9 +85,11 @@ fun App(
                     runCatching { EnglishB2Deck.installOnce(graph) }
                     runCatching { GermanA0Deck.installOnce(graph) }
                     runCatching { GermanA1Deck.installOnce(graph) }
+                    runCatching { AiDeck.installOnce(graph) }
                     // Every deck on the knowledge graph, plus the English grammar topics.
                     runCatching { DeckGraph.sync(graph) }
                     runCatching { EnglishDeck.syncGraph(graph) }
+                    runCatching { AiDeck.syncGraph(graph) }
                     // Same decks and progress as the other phones on this account.
                     runCatching { CloudSync.sync(graph) }
                     // Daily safety net; never fails the launch.
