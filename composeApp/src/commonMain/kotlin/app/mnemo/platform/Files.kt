@@ -45,6 +45,19 @@ expect fun rememberFilePicker(
     onPicked: (PickedFile?) -> Unit,
 ): () -> Unit
 
+/** Writes binary [bytes] (an `.apkg`) where the user chose (Download/Mnemo on Android). Returns the path, or null on cancel. */
+expect suspend fun saveBinaryFile(
+    suggestedName: String,
+    bytes: ByteArray,
+    mimeType: String = "application/octet-stream",
+): String?
+
+/** Builds a zip archive from [entries] (name → bytes), in order. */
+expect fun zip(entries: List<Pair<String, ByteArray>>): ByteArray
+
+/** Reads a whole file. */
+expect fun readFileBytes(path: String): ByteArray
+
 /** Writes [content] somewhere the user chose (Download/Mnemo on Android). Returns the path, or null on cancel. */
 expect suspend fun saveTextFile(
     suggestedName: String,

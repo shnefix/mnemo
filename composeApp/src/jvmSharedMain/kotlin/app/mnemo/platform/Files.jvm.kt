@@ -64,3 +64,17 @@ actual fun writeTempFile(
 actual fun deleteFile(path: String) {
     File(path).delete()
 }
+
+actual fun zip(entries: List<Pair<String, ByteArray>>): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    java.util.zip.ZipOutputStream(out).use { z ->
+        entries.forEach { (name, bytes) ->
+            z.putNextEntry(java.util.zip.ZipEntry(name))
+            z.write(bytes)
+            z.closeEntry()
+        }
+    }
+    return out.toByteArray()
+}
+
+actual fun readFileBytes(path: String): ByteArray = File(path).readBytes()

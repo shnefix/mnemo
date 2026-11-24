@@ -43,16 +43,23 @@ real app. Gradle uninstalls it after `make phone-test`.
 
 - **Today**: what's due, streak, retention, decks with mastery, 30-day forecast.
 - **Decks**: `New deck` accepts `German::Vocab::A1` to nest. Each deck has FSRS settings
-  (desired retention, daily limits, learning steps, leech threshold, review mode).
+  (desired retention, daily limits, learning steps, leech threshold, review mode, new-card order,
+  burying siblings, load balancing and easy days) and can share them through a named preset.
+  *Custom study* on a deck page: forgotten cards, review ahead, extra new cards, preview, or a search.
 - **Add cards** (`+`): Basic, Basic + Reversed, Cloze (`{{c1::text}}`; select a word and
-  press *Cloze*), Type-the-answer. Fields take light Markdown.
+  press *Cloze*), Type-the-answer, Image occlusion, and your own note types (Settings › Note
+  types: fields and `{{Field}}` templates). Fields take light Markdown; the pin keeps a field's
+  text for the next note.
 - **Review**: `Space` reveal · `1–4` grade · `U` undo · `E` edit · `S` suspend · `B` bury
-  · `Esc` leave. On a phone, swipe left = Again, right = Good.
+  · `Ctrl+1–7` flag · `I` card info · `Esc` leave. On a phone, swipe left = Again, right = Good.
 - **Browse**: search with `tag:x deck:y is:due is:new is:learn is:review is:suspended
-  is:leech "phrase" -excluded`; multi-select for tag/move/suspend/reset/delete.
+  is:leech "phrase" -excluded`, plus `flag:1 rated:7:1 added:3 edited:2 introduced:1
+  prop:ivl>=10 prop:due=1 note:Basic card:2 nid:… cid:…`; multi-select for tag/move/suspend/
+  reset/delete/flag/set due date/reposition/find and replace; the tools menu finds duplicates.
 - **Graph**: create concepts, link cards, connect concepts (related / prerequisite / part
   of). Node color = mean recall probability of its cards.
-- **Settings**: Anki `.apkg` import (decks, cards, scheduling, review history, media),
+- **Settings**: Anki `.apkg` import and export (decks, cards, scheduling, review history, media,
+  flags, image occlusion), CSV export,
   CSV import (`front,back,tags`), JSON backup export/restore, theme (OLED dark / light / system).
 
 ## Scheduling

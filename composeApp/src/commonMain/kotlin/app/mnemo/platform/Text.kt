@@ -6,3 +6,6 @@ package app.mnemo.platform
  * `ø` → `o`). Used to compare typed answers fairly on language decks.
  */
 expect fun foldDiacritics(s: String): String
+
+/** SHA-1 of [bytes] (Anki's note checksum). */
+expect fun sha1(bytes: ByteArray): ByteArray

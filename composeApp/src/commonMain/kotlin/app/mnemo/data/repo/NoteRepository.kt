@@ -50,6 +50,122 @@ class NoteRepository(
     suspend fun noteTypeOf(kind: NoteKind): NoteType =
         withContext(Dispatchers.IO) { types.selectByKind(kind.code).executeAsOne().toDomain() }
 
+    /** Adds a note type of your own. Returns its id. */
+    suspend fun createNoteType(type: NoteType): Long =
+        withContext(Dispatchers.IO) {
+            db.transactionWithResult {
+                types.insert(type.name, NoteKind.Custom.code, json.encodeToString(type.fields), json.encodeToString(type.templates))
+                types.lastInsertId().executeAsOne()
+            }
+        }
+
+    /**
+     * Saves changes to one of your note types. [renamed] maps old field names to new ones (the
+     * notes' text moves with them); fields no longer listed are dropped from every note.
+     * [removedTemplates] are indices of the *old* template list whose cards are deleted (later
+     * cards shift down); new templates get cards for every note whose fields fill their front.
+     */
+    suspend fun updateNoteType(
+        type: NoteType,
+        renamed: Map<String, String> = emptyMap(),
+        removedTemplates: List<Int> = emptyList(),
+    ) = withContext(Dispatchers.IO) {
+        val now = clock.now()
+        db.transaction {
+            types.update(type.name, json.encodeToString(type.fields), json.encodeToString(type.templates), type.id)
+            removedTemplates.sortedDescending().forEach { idx ->
+                cards.deleteByTypeTemplate(idx.toLong(), type.id)
+                cards.shiftTemplatesDown(idx.toLong(), type.id)
+            }
+            val keep = type.fields.toSet()
+            notes.selectByType(type.id).executeAsList().forEach { row ->
+                val old = decodeFieldsRaw(row.fields_json)
+                val moved = LinkedHashMap<String, String>()
+                old.forEach { (k, v) ->
+                    val name = renamed[k] ?: k
+                    // Hidden keys (an imported note's _guid) stay.
+                    if (name in keep || name.startsWith("_")) moved[name] = v
+                }
+                if (moved != old) notes.updateFields(encodeFields(moved), now, row.id)
+                val existing =
+                    cards
+                        .selectByNote(row.id)
+                        .executeAsList()
+                        .map { it.template_index.toInt() }
+                        .toSet()
+                CardGenerator.templateIndices(type, moved).filter { it !in existing }.forEach { idx ->
+                    cards.insert(row.id, idx.toLong(), now)
+                }
+            }
+        }
+    }
+
+    /** How many notes use a note type. */
+    suspend fun noteCountOfType(typeId: Long): Long = withContext(Dispatchers.IO) { types.noteCount(typeId).executeAsOne() }
+
+    /** Deletes one of your note types; refuses (false) while notes still use it. */
+    suspend fun deleteNoteType(typeId: Long): Boolean =
+        withContext(Dispatchers.IO) {
+            db.transactionWithResult {
+                if (types.noteCount(typeId).executeAsOne() > 0) return@transactionWithResult false
+                types.delete(typeId)
+                true
+            }
+        }
+
+    /**
+     * Find and replace in the notes [noteIds]: in [field] only, or every field when null.
+     * [regex] treats [find] as a regular expression (`$1` works in [replace]). Returns how many
+     * notes changed; new cloze numbers get their cards.
+     */
+    suspend fun findReplace(
+        noteIds: Collection<Long>,
+        find: String,
+        replace: String,
+        field: String? = null,
+        regex: Boolean = false,
+        matchCase: Boolean = false,
+    ): Int {
+        if (find.isEmpty()) return 0
+        val options = if (matchCase) emptySet() else setOf(RegexOption.IGNORE_CASE)
+        val pattern = if (regex) Regex(find, options) else Regex(Regex.escape(find), options)
+        val replacement = if (regex) replace else Regex.escapeReplacement(replace)
+        val updates =
+            withContext(Dispatchers.IO) {
+                noteIds.toList().chunked(500).flatMap { chunk ->
+                    notes.selectByIds(chunk).executeAsList().mapNotNull { row ->
+                        val fields = decodeFieldsRaw(row.fields_json)
+                        val changed =
+                            fields.mapValues { (k, v) ->
+                                if ((field == null && !k.startsWith("_")) || k == field) pattern.replace(v, replacement) else v
+                            }
+                        if (changed == fields) null else NoteUpdate(row.id, row.deck_id, changed, decodeTags(row.tags))
+                    }
+                }
+            }
+        return updateMany(updates)
+    }
+
+    /**
+     * Notes of [typeId] whose [field] holds the same text (ignoring case, spacing, Markdown and
+     * HTML marks), biggest groups first. Each group lists the note ids and the shared text.
+     */
+    suspend fun duplicates(
+        typeId: Long,
+        field: String,
+    ): List<Pair<String, List<Long>>> =
+        withContext(Dispatchers.IO) {
+            notes
+                .selectByType(typeId)
+                .executeAsList()
+                .map { row -> row.id to decodeFieldsRaw(row.fields_json)[field].orEmpty() }
+                .filter { it.second.isNotBlank() }
+                .groupBy { normalizeForDupes(it.second) }
+                .filter { it.key.isNotEmpty() && it.value.size > 1 }
+                .map { (_, rows) -> rows.first().second.trim() to rows.map { it.first } }
+                .sortedByDescending { it.second.size }
+        }
+
     suspend fun byId(id: Long): Note? = withContext(Dispatchers.IO) { notes.selectById(id).executeAsOneOrNull()?.toDomain() }
 
     fun observeAll(): Flow<List<Note>> =
@@ -219,6 +335,21 @@ class NoteRepository(
     /** Every `source_id` in use (importers set one to recognise notes they created). */
     suspend fun existingSourceIds(): List<Long> = withContext(Dispatchers.IO) { notes.sourceIds().executeAsList().filterNotNull() }
 }
+
+private fun decodeFieldsRaw(raw: String): Map<String, String> =
+    app.mnemo.data.db
+        .decodeFields(raw)
+
+private val dupeMarks = Regex("""<[^>]+>|[*_`#>\[\]()!]|&nbsp;""")
+private val dupeSpaces = Regex("\\s+")
+
+/** Text as "Find duplicates" compares it. */
+fun normalizeForDupes(s: String): String =
+    s
+        .replace(dupeMarks, " ")
+        .replace(dupeSpaces, " ")
+        .trim()
+        .lowercase()
 
 /** How long deletions are remembered for sync (see [NoteRepository.pruneTombstones]). */
 const val TOMBSTONE_MAX_AGE_MS = 180L * 24 * 60 * 60 * 1000

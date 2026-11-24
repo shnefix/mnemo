@@ -5,6 +5,7 @@ import app.cash.sqldelight.db.SqlDriver
 import app.mnemo.db.MnemoDatabase
 import app.mnemo.domain.search.SearchQuery
 import app.mnemo.domain.search.SortKey
+import app.mnemo.domain.stats.startOfLocalDayPlus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -112,8 +113,80 @@ class BrowseRepository(
                     params += "%${escapeLike(term.text)}%"
                     "note.fields_json LIKE ? ESCAPE '\\'"
                 }
+                is SearchQuery.Term.Op -> opClause(term, now, params)
             }
         return if (term.negated) "NOT ($sql)" else sql
+    }
+
+    /** The SQL for `flag:`, `rated:`, `added:`, `edited:`, `introduced:`, `prop:`, `note:`, `card:`, `nid:`, `cid:`. */
+    private fun opClause(
+        term: SearchQuery.Term.Op,
+        now: Long,
+        params: MutableList<Any>,
+    ): String {
+        val v = term.value.trim()
+
+        /** Start of the day `n` days back counting today as 1 (Anki's `rated:1` = today). */
+        fun since(n: Int): Long = startOfLocalDayPlus(now, -(n.coerceIn(1, 36_500) - 1))
+        return when (term.key) {
+            "flag" -> v.toIntOrNull()?.let { "card.flag = $it" } ?: "0"
+            "card" -> v.toIntOrNull()?.let { "card.template_index = ${it - 1}" } ?: "0"
+            "nid" -> SearchQuery.ids(v).takeIf { it.isNotEmpty() }?.let { "note.id IN (${it.joinToString(",")})" } ?: "0"
+            "cid" -> SearchQuery.ids(v).takeIf { it.isNotEmpty() }?.let { "card.id IN (${it.joinToString(",")})" } ?: "0"
+            "rated" -> {
+                val parts = v.split(':')
+                val days = parts[0].toIntOrNull() ?: return "0"
+                params += since(days)
+                val ease = parts.getOrNull(1)?.toIntOrNull()?.takeIf { it in 1..4 }
+                "card.id IN (SELECT card_id FROM review_log WHERE reviewed_at >= ?" + (ease?.let { " AND rating = $it" } ?: "") + ")"
+            }
+            "added" -> {
+                params += since(v.toIntOrNull() ?: return "0")
+                "note.created_at >= ?"
+            }
+            "edited" -> {
+                params += since(v.toIntOrNull() ?: return "0")
+                "note.updated_at >= ?"
+            }
+            "introduced" -> {
+                params += since(v.toIntOrNull() ?: return "0")
+                "card.id IN (SELECT card_id FROM review_log GROUP BY card_id " +
+                    "HAVING min(CASE WHEN state_before = 0 THEN reviewed_at END) >= ?)"
+            }
+            "note" -> {
+                params += v.replace("*", "%").replace("_", " ")
+                "note.note_type_id IN (SELECT id FROM note_type WHERE name LIKE ?)"
+            }
+            "prop" -> {
+                val p = SearchQuery.Prop.parse(v) ?: return "0"
+                val op = p.op
+                when (p.name) {
+                    "ivl" -> "(card.state != 0 AND card.scheduled_days $op ${p.value.toLong()})"
+                    "reps" -> "card.reps $op ${p.value.toLong()}"
+                    "lapses" -> "card.lapses $op ${p.value.toLong()}"
+                    "s" -> "(card.stability IS NOT NULL AND card.stability $op ${p.value})"
+                    "d" -> "(card.difficulty IS NOT NULL AND (card.difficulty - 1.0) / 9.0 $op ${p.value})"
+                    "due" -> {
+                        // Days from today: prop:due=0 is due today, prop:due<=-1 overdue, prop:due>3 later than in 3 days.
+                        val d = p.value.toInt()
+                        val start = startOfLocalDayPlus(now, d)
+                        val end = startOfLocalDayPlus(now, d + 1)
+                        val cmp =
+                            when (p.op) {
+                                "<" -> "card.due < $start"
+                                "<=" -> "card.due < $end"
+                                ">" -> "card.due >= $end"
+                                ">=" -> "card.due >= $start"
+                                "!=" -> "(card.due < $start OR card.due >= $end)"
+                                else -> "(card.due >= $start AND card.due < $end)"
+                            }
+                        "(card.state != 0 AND $cmp)"
+                    }
+                    else -> "0"
+                }
+            }
+            else -> "0"
+        }
     }
 
     /** Ids of every deck whose path is [name] or lies below it (case-insensitive), like Anki's `deck:` term. */

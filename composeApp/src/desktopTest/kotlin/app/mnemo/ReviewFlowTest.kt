@@ -68,7 +68,8 @@ class ReviewFlowTest {
         runBlocking {
             val clock = TestClock(start)
             val g = graph(clock)
-            val deckId = g.decks.createByPath("Test")
+            // Sibling burying off: this checks all 20 cards come in one session.
+            val deckId = g.decks.createByPath("Test", DeckSettings(buryNewSiblings = false, buryReviewSiblings = false))
             val basic = g.notes.noteTypeOf(NoteKind.Basic)
             val reversed = g.notes.noteTypeOf(NoteKind.Reversed)
             val cloze = g.notes.noteTypeOf(NoteKind.Cloze)

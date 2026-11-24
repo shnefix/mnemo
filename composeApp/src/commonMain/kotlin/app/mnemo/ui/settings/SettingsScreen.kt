@@ -45,8 +45,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.mnemo.LocalAppGraph
+import app.mnemo.data.io.ApkgExporter
 import app.mnemo.data.io.ApkgImporter
 import app.mnemo.data.io.AutoBackup
+import app.mnemo.data.io.CsvExporter
 import app.mnemo.data.io.CsvImporter
 import app.mnemo.data.io.DeckTrash
 import app.mnemo.data.io.JsonBackup
@@ -60,6 +62,7 @@ import app.mnemo.platform.refreshWidgets
 import app.mnemo.platform.rememberFilePicker
 import app.mnemo.platform.rememberFolderPicker
 import app.mnemo.platform.rememberNotificationPermissionRequest
+import app.mnemo.platform.saveBinaryFile
 import app.mnemo.platform.saveTextFile
 import app.mnemo.ui.components.Eyebrow
 import app.mnemo.ui.components.Layers
@@ -79,7 +82,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onNoteTypes: () -> Unit = {}) {
     val graph = LocalAppGraph.current
     val scope = rememberCoroutineScope()
     val compact = LocalWindowSize.current == WindowSize.Compact
@@ -95,6 +98,8 @@ fun SettingsScreen() {
     var dayStart by remember { mutableStateOf(DayStart.hour) }
     var reminderHour by remember { mutableStateOf(Reminder.hour) }
     var titleFallback by remember { mutableStateOf(false) }
+    var exportDeck by remember { mutableStateOf<Deck?>(null) }
+    var exportScheduling by remember { mutableStateOf(true) }
     val requestNotifications =
         rememberNotificationPermissionRequest { granted ->
             if (granted) {
@@ -464,6 +469,68 @@ fun SettingsScreen() {
                         enabled = !busy,
                         onClick = pickFolder,
                     )
+                }
+                row("export", "Export", "Anki .apkg or CSV", MnemoIcons.Export, Layers.amber) {
+                    Hint(
+                        "An .apkg opens in Anki (desktop, AnkiDroid, AnkiMobile): decks, note types, cards, media and, if you like, " +
+                            "scheduling, flags and review history. CSV holds front, back and tags.",
+                    )
+                    MnemoSelect(
+                        label = "Deck",
+                        options = listOf<Deck?>(null) + decks,
+                        selected = exportDeck,
+                        display = { it?.path ?: "All decks" },
+                        onSelect = { exportDeck = it },
+                        placeholder = "All decks",
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = exportScheduling,
+                            onCheckedChange = { exportScheduling = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = MnemoColors.onCoral, checkedTrackColor = MnemoColors.coral),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("Include scheduling and review history", style = MaterialTheme.typography.bodyMedium, color = MnemoColors.text)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MnemoButton("Export .apkg", icon = MnemoIcons.Export, primary = true, enabled = !busy, onClick = {
+                            scope.launch {
+                                busy = true
+                                message =
+                                    runCatching {
+                                        val r = ApkgExporter.export(graph, exportDeck?.id, exportScheduling)
+                                        val name = (exportDeck?.path?.replace("::", " - ") ?: "Mnemo") + ".apkg"
+                                        val path = saveBinaryFile(name, r.bytes, "application/apkg")
+                                        if (path == null) {
+                                            "Export cancelled"
+                                        } else {
+                                            "Exported ${r.notes} notes, ${r.cards} cards, ${r.reviews} reviews and ${r.media} media files to $path"
+                                        }
+                                    }.getOrElse { "Export failed: ${it.message}" }
+                                busy = false
+                            }
+                        })
+                        MnemoButton("Export CSV", icon = MnemoIcons.Export, enabled = !busy, onClick = {
+                            scope.launch {
+                                val r = CsvExporter.export(graph, exportDeck?.id)
+                                val name = (exportDeck?.path?.replace("::", " - ") ?: "Mnemo") + ".csv"
+                                val path = saveTextFile(name, r.text)
+                                message =
+                                    if (path == null) {
+                                        "Export cancelled"
+                                    } else {
+                                        "Exported ${r.notes} notes to $path" +
+                                            if (r.skipped > 0) " · ${r.skipped} image-occlusion notes left out" else ""
+                                    }
+                            }
+                        })
+                    }
+                }
+                row("notetypes", "Note types", "Your own fields and card templates", MnemoIcons.Edit, Layers.amber) {
+                    Hint("Make note types with the fields you need, and card templates that decide what each card asks.")
+                    MnemoButton("Manage note types", icon = MnemoIcons.Edit, onClick = onNoteTypes)
                 }
                 row("backup", "Backup file", "Save or restore everything as one file", MnemoIcons.Export, Layers.amber) {
                     Hint("A JSON backup holds decks, notes, cards, review history and concepts. Restoring merges into the current data.")

@@ -29,8 +29,39 @@ object DailyQueue {
         val tree = Tree(all)
         if (deckId != null && tree.byId[deckId] == null) return emptyList()
         val reviewLimit = (deckId?.let { tree.byId[it]?.settings } ?: DeckSettings()).reviewsPerDay
-        val due = graph.cards.dueQueue(tree.subtree(deckId), now, newLimit = 0, reviewLimit = reviewLimit)
-        return due + newCards(graph, tree, deckId, now)
+        val subtree = tree.subtree(deckId)
+        val due = graph.cards.dueQueue(subtree, now, newLimit = 0, reviewLimit = Int.MAX_VALUE)
+        val reviewLeft = (reviewLimit - graph.reviewLogs.reviewsDoneSince(subtree, startOfLocalDay(now))).coerceAtLeast(0)
+        val kept = withoutSiblings(due, graph.cards.deckOfCards(due.map { it.id }), tree, reviewLeft)
+        return kept + newCards(graph, tree, deckId, now)
+    }
+
+    /**
+     * Anki's sibling burying while building the queue: in decks that bury them, only the first
+     * review card of a note comes today (learning cards always come), and [newCards] takes one new
+     * card per note. Answering a card buries its other siblings ([ReviewSession]). The review limit
+     * is applied after, so buried siblings don't use it up.
+     */
+    private fun withoutSiblings(
+        due: List<Card>,
+        deckOf: Map<Long, Long>,
+        tree: Tree,
+        reviewLimit: Int,
+    ): List<Card> {
+        val seen = HashSet<Long>()
+        var reviews = 0
+        val out = ArrayList<Card>(due.size)
+        for (c in due) {
+            val isReview = c.state == app.mnemo.domain.model.CardState.Review
+            if (isReview) {
+                val bury = deckOf[c.id]?.let { tree.byId[it]?.settings?.buryReviewSiblings } ?: true
+                if (bury && !seen.add(c.noteId)) continue
+                if (reviews >= reviewLimit) continue
+                reviews += 1
+            }
+            out += c
+        }
+        return out
     }
 
     /** What [cards] would return, as counts. */
@@ -64,8 +95,8 @@ object DailyQueue {
     /** Per-deck numbers from [snapshot]; [counts] gives the same result as [DailyQueue.counts]. */
     class Snapshot internal constructor(
         private val tree: Tree,
-        private val newByDeck: Map<Long, Int>,
-        private val dueByDeck: Map<Long, Pair<Int, Int>>,
+        private val newByDeck: Map<Long, Pair<Int, Int>>,
+        private val dueByDeck: Map<Long, app.mnemo.data.repo.CardRepository.DueByDeck>,
         private val introducedByDeck: Map<Long, Int>,
         private val reviewsDoneByDeck: Map<Long, Int>,
     ) {
@@ -78,8 +109,13 @@ object DailyQueue {
             if (deckId != null && tree.byId[deckId] == null) return DueCounts(0, 0, 0)
             val reviewLimit = (deckId?.let { tree.byId[it]?.settings } ?: DeckSettings()).reviewsPerDay
             val ids = tree.subtree(deckId)
-            val learning = ids.sumOf { dueByDeck[it]?.first ?: 0 }
-            val review = ids.sumOf { dueByDeck[it]?.second ?: 0 }
+            val learning = ids.sumOf { dueByDeck[it]?.learning ?: 0 }
+            // Decks that bury review siblings show one review card per note.
+            val review =
+                ids.sumOf { id ->
+                    val d = dueByDeck[id] ?: return@sumOf 0
+                    if (tree.byId[id]?.settings?.buryReviewSiblings != false) d.reviewNotes else d.review
+                }
             val reviewLeft = (reviewLimit - ids.sumOf { reviewsDoneByDeck[it] ?: 0 }).coerceAtLeast(0)
             return DueCounts(
                 new = newCount(deckId?.let { tree.byId[it] }, Int.MAX_VALUE),
@@ -97,7 +133,11 @@ object DailyQueue {
             val introduced = sum(deck?.id) { introducedByDeck[it] ?: 0 }
             val left = minOf(cap, limit - introduced).coerceAtLeast(0)
             if (left == 0) return 0
-            var taken = if (deck != null) minOf(newByDeck[deck.id] ?: 0, left) else 0
+            val available =
+                deck?.let { d ->
+                    newByDeck[d.id]?.let { (cards, notes) -> if (d.settings.buryNewSiblings) notes else cards }
+                } ?: 0
+            var taken = if (deck != null) minOf(available, left) else 0
             for (child in tree.children[deck?.id].orEmpty()) {
                 if (taken >= left) break
                 taken += newCount(child, left - taken)
@@ -143,10 +183,12 @@ object DailyQueue {
             val parts = mutableListOf<List<Card>>()
             var taken = 0
             if (deck != null) {
-                graph.cards.newCards(listOf(deck.id), now, left).also {
-                    parts += it
-                    taken += it.size
-                }
+                graph.cards
+                    .newCards(listOf(deck.id), now, left, deck.settings.newOrder, onePerNote = deck.settings.buryNewSiblings)
+                    .also {
+                        parts += it
+                        taken += it.size
+                    }
             }
             for (child in tree.children[deck?.id].orEmpty()) {
                 if (taken >= left) break

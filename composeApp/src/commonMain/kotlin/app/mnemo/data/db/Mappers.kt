@@ -101,6 +101,7 @@ fun DbCard.toDomain(): Card =
         suspended = suspended != 0L,
         buriedUntil = buried_until,
         learningStep = learning_step?.toInt(),
+        flag = flag.toInt(),
     )
 
 private fun cardOf(
@@ -119,6 +120,7 @@ private fun cardOf(
     suspended: Long,
     buriedUntil: Long?,
     learningStep: Long?,
+    flag: Long,
 ) = Card(
     id = id,
     noteId = noteId,
@@ -135,6 +137,7 @@ private fun cardOf(
     suspended = suspended != 0L,
     buriedUntil = buriedUntil,
     learningStep = learningStep?.toInt(),
+    flag = flag.toInt(),
 )
 
 fun DbCardView.toDomain(): CardView =
@@ -156,6 +159,7 @@ fun DbCardView.toDomain(): CardView =
                 suspended,
                 buried_until,
                 learning_step,
+                flag,
             ),
         deckId = deck_id,
         deckName = deck_name,
@@ -185,6 +189,7 @@ fun DbAllCardView.toDomain(): CardView =
                 suspended,
                 buried_until,
                 learning_step,
+                flag,
             ),
         deckId = deck_id,
         deckName = deck_name,
@@ -214,6 +219,7 @@ fun DbCardViewsByIds.toDomain(): CardView =
                 suspended,
                 buried_until,
                 learning_step,
+                flag,
             ),
         deckId = deck_id,
         deckName = deck_name,

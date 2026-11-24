@@ -83,6 +83,20 @@ actual suspend fun saveTextFile(
         file.absolutePath
     }
 
+actual suspend fun saveBinaryFile(
+    suggestedName: String,
+    bytes: ByteArray,
+    mimeType: String,
+): String? =
+    withContext(Dispatchers.Swing) {
+        val chooser = JFileChooser()
+        chooser.selectedFile = File(suggestedName)
+        if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) return@withContext null
+        val file = chooser.selectedFile
+        file.writeBytes(bytes)
+        file.absolutePath
+    }
+
 actual fun decodeImage(bytes: ByteArray): ImageBitmap? =
     runCatching { Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
 

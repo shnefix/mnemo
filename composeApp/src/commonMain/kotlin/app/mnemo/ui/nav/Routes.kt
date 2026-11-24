@@ -14,6 +14,8 @@ sealed interface Route {
         val weak: Boolean = false,
         /** Study only one layer of what is due: "review", "learning" or "new" (null = all of it). */
         val layer: String? = null,
+        /** A custom-study session (`CustomStudy.encode()`). */
+        val custom: String? = null,
     ) : Route
 
     @Serializable data class Browse(
@@ -36,6 +38,9 @@ sealed interface Route {
     @Serializable data object Stats : Route
 
     @Serializable data object Settings : Route
+
+    /** Your note types: fields and card templates. */
+    @Serializable data object NoteTypes : Route
 
     @Serializable data class DeckSettings(
         val deckId: Long,

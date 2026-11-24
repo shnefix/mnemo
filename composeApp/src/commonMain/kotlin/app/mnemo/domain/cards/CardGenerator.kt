@@ -15,6 +15,10 @@ data class RenderedCard(
      * (dictation cards). The marker is removed from [question].
      */
     val listen: String? = null,
+    /** An image-occlusion card: the picture with its boxes ([question] holds the header). */
+    val occlusion: OcclusionView? = null,
+    /** The back already repeats the front (`{{FrontSide}}`), so Review needn't show it again. */
+    val answerHasQuestion: Boolean = false,
 )
 
 /**
@@ -29,6 +33,12 @@ object CardGenerator {
     ): List<Int> =
         when (noteType.kind) {
             NoteKind.Cloze -> ClozeParser.indices(fields["Text"].orEmpty()).map { it - 1 }
+            NoteKind.Occlusion ->
+                Occlusions
+                    .parse(fields["Occlusions"])
+                    .groups.indices
+                    .toList()
+            NoteKind.Custom -> noteType.templates.indices.filter { Templates.generates(noteType.templates[it].front, fields) }
             else -> noteType.templates.indices.toList()
         }
 
@@ -66,6 +76,27 @@ object CardGenerator {
                     question = ClozeParser.renderQuestion(text, cloze),
                     answer = answer,
                     expected = ClozeParser.answerFor(text, cloze),
+                )
+            }
+            NoteKind.Occlusion -> {
+                val occ = Occlusions.parse(fields["Occlusions"])
+                val group = occ.groups.getOrElse(templateIndex) { occ.groups.firstOrNull() ?: 1 }
+                RenderedCard(
+                    question = fields["Header"].orEmpty().trim(),
+                    answer = fields["Back Extra"].orEmpty().trim(),
+                    expected = null,
+                    occlusion = OcclusionView(fields["Image"].orEmpty().trim(), occ, group),
+                )
+            }
+            NoteKind.Custom -> {
+                val template = noteType.templates.getOrElse(templateIndex) { noteType.templates.first() }
+                val front = Templates.render(template.front, fields, question = true)
+                val back = Templates.render(template.back, fields, question = false, frontSide = front.text)
+                RenderedCard(
+                    question = front.text,
+                    answer = back.text,
+                    expected = front.typeField?.let { fields[it].orEmpty() }?.takeIf { it.isNotBlank() },
+                    answerHasQuestion = "FrontSide" in template.back,
                 )
             }
             NoteKind.Vocab -> {
@@ -177,5 +208,22 @@ object CardGenerator {
                         CardTemplate("Translation → Word", "{{Translation}}", "{{Word}}"),
                     ),
             ),
+            NoteType(
+                id = 0,
+                name = "Image occlusion",
+                kind = NoteKind.Occlusion,
+                fields = listOf("Image", "Occlusions", "Header", "Back Extra"),
+                templates = listOf(CardTemplate("Occlusion", "{{Header}}", "{{Back Extra}}")),
+            ),
+        )
+
+    /** A starting point for a note type of your own. */
+    fun newCustomType(name: String): NoteType =
+        NoteType(
+            id = 0,
+            name = name,
+            kind = NoteKind.Custom,
+            fields = listOf("Front", "Back"),
+            templates = listOf(CardTemplate("Card 1", "{{Front}}", "{{Back}}")),
         )
 }

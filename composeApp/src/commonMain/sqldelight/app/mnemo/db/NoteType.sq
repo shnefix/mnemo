@@ -1,7 +1,7 @@
 CREATE TABLE note_type (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    kind TEXT NOT NULL,              -- basic | reversed | cloze | type
+    kind TEXT NOT NULL,              -- basic | reversed | cloze | type | vocab | occlusion | custom
     fields_json TEXT NOT NULL,       -- ["Front","Back"]
     templates_json TEXT NOT NULL     -- [{"name":"Card 1","front":"{{Front}}","back":"{{Back}}"}]
 );
@@ -23,3 +23,12 @@ SELECT last_insert_rowid();
 
 count:
 SELECT count(*) FROM note_type;
+
+update:
+UPDATE note_type SET name = ?, fields_json = ?, templates_json = ? WHERE id = ?;
+
+delete:
+DELETE FROM note_type WHERE id = ?;
+
+noteCount:
+SELECT count(*) FROM note WHERE note_type_id = ?;

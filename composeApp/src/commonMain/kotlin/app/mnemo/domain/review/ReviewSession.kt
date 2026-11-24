@@ -10,9 +10,13 @@ import app.mnemo.domain.model.DeckSettings
 import app.mnemo.domain.model.MINUTE_MS
 import app.mnemo.domain.model.Rating
 import app.mnemo.domain.model.ReviewMode
+import app.mnemo.domain.scheduler.LoadBalancer
 import app.mnemo.domain.scheduler.Scheduled
 import app.mnemo.domain.scheduler.Scheduler
+import app.mnemo.domain.stats.localDate
 import app.mnemo.domain.stats.nextLocalDayStart
+import app.mnemo.domain.stats.plusDays
+import app.mnemo.domain.stats.startOfLocalDay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -31,12 +35,18 @@ class ReviewSession(
     private val cardIds: List<Long>? = null,
     /** When set, only due cards in these states are studied (a Today "layer": review, learning or new). */
     private val states: Set<CardState>? = null,
+    /**
+     * False for a preview (custom study without rescheduling): answers change nothing and log
+     * nothing; Again shows the card once more at the end.
+     */
+    val reschedule: Boolean = true,
 ) {
     private val queue = ArrayDeque<Card>()
     private val undoStack = ArrayDeque<UndoEntry>()
     private val settingsByDeck = HashMap<Long, DeckSettings>()
     private val schedulers = HashMap<Long, Scheduler>()
     private var deckOfNote = HashMap<Long, Long>()
+    private var load: DayLoad? = null
 
     /** Everything an action did, so [undo] can take all of it back, not just the card row. */
     private sealed class UndoEntry {
@@ -49,6 +59,15 @@ class ReviewSession(
             val leechTagged: Boolean,
             /** The answer suspended the card as a leech (so undo unsuspends it). */
             val leechSuspended: Boolean,
+            /** Siblings the answer buried until tomorrow, and whether each was waiting in this session. */
+            val buriedSiblings: List<Pair<Card, Boolean>> = emptyList(),
+        ) : UndoEntry()
+
+        /** A preview answer: nothing was saved; Again put the card back at the end. */
+        class Previewed(
+            val card: Card,
+            val rating: Rating,
+            val requeued: Boolean,
         ) : UndoEntry()
 
         class Suspended(
@@ -144,8 +163,9 @@ class ReviewSession(
         return view
     }
 
-    /** Intervals each grade would give the current card, for the buttons. */
-    suspend fun preview(view: CardView): Map<Rating, Scheduled> = schedulerFor(view.deckId).preview(view.card, graph.clock.now())
+    /** Intervals each grade would give the current card, for the buttons (none in a preview). */
+    suspend fun preview(view: CardView): Map<Rating, Scheduled> =
+        if (reschedule) schedulerFor(view.deckId).preview(view.card, graph.clock.now()) else emptyMap()
 
     /** Grades the current card. Returns the schedule applied, or null when nothing is queued. */
     suspend fun answer(
@@ -159,6 +179,16 @@ class ReviewSession(
         val before = queue.removeFirstOrNull() ?: return null
         val view = graph.cards.view(before.id) ?: return null
         val now = graph.clock.now()
+        if (!reschedule) {
+            done += 1
+            val again = rating == Rating.Again
+            if (again) {
+                queue.addLast(before)
+                total += 1
+            }
+            undoStack.addLast(UndoEntry.Previewed(before, rating, again))
+            return null
+        }
         val settings = settingsByDeck[view.deckId] ?: DeckSettings()
         val scheduled = schedulerFor(view.deckId).schedule(before, rating, now)
         // Card state and its log entry land together or not at all; a crash between them
@@ -183,7 +213,9 @@ class ReviewSession(
                 leechSuspended = true
             }
         }
-        undoStack.addLast(UndoEntry.Answer(logId, rating, before, scheduled.card, leechTagged, leechSuspended))
+        if (scheduled.card.state == CardState.Review) load?.recordDue(scheduled.card.due)
+        val buried = burySiblings(before, settings, now)
+        undoStack.addLast(UndoEntry.Answer(logId, rating, before, scheduled.card, leechTagged, leechSuspended, buried))
 
         if (scheduled.card.due <= now + LEARN_AHEAD_MS) {
             // Back into this session, after everything already queued.
@@ -216,6 +248,25 @@ class ReviewSession(
                     total -= 1
                 }
                 queue.addFirst(entry.before)
+                done -= 1
+                entry.buriedSiblings.forEach { (sib, wasQueued) ->
+                    graph.cards.bury(sib.id, sib.buriedUntil)
+                    if (wasQueued) {
+                        queue.addLast(sib)
+                        total += 1
+                    }
+                }
+                Undone.Answer(entry.rating)
+            }
+            is UndoEntry.Previewed -> {
+                if (entry.requeued) {
+                    val i = queue.indexOfLast { it.id == entry.card.id }
+                    if (i >= 0) {
+                        queue.removeAt(i)
+                        total -= 1
+                    }
+                }
+                queue.addFirst(entry.card)
                 done -= 1
                 Undone.Answer(entry.rating)
             }
@@ -251,16 +302,94 @@ class ReviewSession(
         return true
     }
 
+    /**
+     * Anki's sibling burying: once a card is answered, its note's other new and review cards
+     * (as the deck's settings say) wait until tomorrow and leave this session.
+     */
+    private suspend fun burySiblings(
+        answered: Card,
+        settings: DeckSettings,
+        now: Long,
+    ): List<Pair<Card, Boolean>> {
+        if (!settings.buryNewSiblings && !settings.buryReviewSiblings) return emptyList()
+        val until = nextLocalDayStart(now)
+        val out = mutableListOf<Pair<Card, Boolean>>()
+        for (sib in graph.cards.siblings(answered.noteId, answered.id)) {
+            val bury =
+                !sib.suspended &&
+                    (
+                        (sib.state == CardState.New && settings.buryNewSiblings) ||
+                            (sib.state == CardState.Review && settings.buryReviewSiblings)
+                    )
+            if (!bury || (sib.buriedUntil ?: 0) >= until) continue
+            graph.cards.bury(sib.id, until)
+            val i = queue.indexOfFirst { it.id == sib.id }
+            if (i >= 0) {
+                queue.removeAt(i)
+                total -= 1
+            }
+            out += sib to (i >= 0)
+        }
+        return out
+    }
+
+    /** Toggles [flag] on the current card (the same flag again removes it). Returns the new flag. */
+    suspend fun flagCurrent(flag: Int): Int? {
+        val card = queue.firstOrNull() ?: return null
+        val current = graph.cards.byId(card.id)?.flag ?: 0
+        val next = if (current == flag) 0 else flag
+        graph.cards.setFlag(listOf(card.id), next)
+        return next
+    }
+
     /** Re-reads the current card after an edit so the displayed text is fresh. */
     fun skipCurrent() {
         queue.removeFirstOrNull()?.let { queue.addLast(it) }
     }
 
-    private fun schedulerFor(deckId: Long): Scheduler =
-        schedulers.getOrPut(deckId) { graph.scheduler(settingsByDeck[deckId] ?: DeckSettings()) }
+    private suspend fun schedulerFor(deckId: Long): Scheduler {
+        schedulers[deckId]?.let { return it }
+        val settings = settingsByDeck[deckId] ?: DeckSettings()
+        val balancer =
+            if (settings.loadBalance || settings.hasEasyDays) {
+                load ?: DayLoad(graph.clock.now(), graph.cards.scheduledDues()).also { load = it }
+            } else {
+                null
+            }
+        return graph.scheduler(settings, balancer).also { schedulers[deckId] = it }
+    }
 
     companion object {
         const val LEARN_AHEAD_MS: Long = 20 * MINUTE_MS
         const val GATE_MASTERY = 0.70
+    }
+}
+
+/**
+ * Reviews due per coming study day, counted once from every scheduled card's due time and kept
+ * up to date as this session schedules more, for [LoadBalancer].
+ */
+internal class DayLoad(
+    private val now: Long,
+    dues: List<Long>,
+) : LoadBalancer {
+    private val today = startOfLocalDay(now)
+    private val counts = HashMap<Int, Int>()
+
+    init {
+        dues.forEach { record(offsetOf(it)) }
+    }
+
+    /** Study-day offset of [due] from today; overdue cards count for today. */
+    private fun offsetOf(due: Long): Int = if (due <= today) 0 else ((due - today) / app.mnemo.domain.model.DAY_MS).toInt()
+
+    fun recordDue(due: Long) = record(offsetOf(due))
+
+    override fun reviewsOn(dayOffset: Int): Int = counts[dayOffset] ?: 0
+
+    override fun weekday(dayOffset: Int): Int = localDate(now).plusDays(dayOffset).dayOfWeek.ordinal
+
+    override fun record(dayOffset: Int) {
+        counts[dayOffset] = (counts[dayOffset] ?: 0) + 1
     }
 }

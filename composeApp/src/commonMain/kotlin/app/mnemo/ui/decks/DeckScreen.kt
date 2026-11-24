@@ -72,6 +72,7 @@ fun DeckScreen(
     onBrowse: (query: String) -> Unit,
     onSettings: (Long) -> Unit,
     onOpen: (Long) -> Unit,
+    onCustomStudy: (deckId: Long, spec: String) -> Unit = { _, _ -> },
 ) {
     val graph = LocalAppGraph.current
     val vm: DecksViewModel = viewModel(key = "deck-$deckId") { DecksViewModel(graph) }
@@ -85,6 +86,7 @@ fun DeckScreen(
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    var customStudy by remember { mutableStateOf(false) }
     // Average answer time over the last 30 days, for the "about N min" estimate (8 s before any reviews).
     var avgMs by remember { mutableIntStateOf(8_000) }
     LaunchedEffect(Unit) {
@@ -228,10 +230,20 @@ fun DeckScreen(
                 }
                 ActionTile("Deck settings", MnemoIcons.Settings, MnemoColors.lavender, Modifier.weight(1f)) { onSettings(deckId) }
             }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionTile("Custom study", MnemoIcons.Target, MnemoColors.lime, Modifier.weight(1f)) { customStudy = true }
+            }
             Spacer(Modifier.height(32.dp))
         }
     }
 
+    if (customStudy) {
+        CustomStudyDialog(row.deck.path, onDismiss = { customStudy = false }) { spec ->
+            customStudy = false
+            onCustomStudy(deckId, spec.encode())
+        }
+    }
     if (renaming) {
         NameDialog(
             title = "Rename deck",

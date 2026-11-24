@@ -37,6 +37,7 @@ import app.mnemo.ui.nav.AdaptiveScaffold
 import app.mnemo.ui.nav.NavSection
 import app.mnemo.ui.nav.Route
 import app.mnemo.ui.nav.WindowSizeProvider
+import app.mnemo.ui.notetypes.NoteTypesScreen
 import app.mnemo.ui.onboarding.OnboardingScreen
 import app.mnemo.ui.review.ReviewScreen
 import app.mnemo.ui.settings.SettingsScreen
@@ -219,6 +220,7 @@ fun App(
                                 onBrowse = { nav.navigate(Route.Browse(it)) },
                                 onSettings = { nav.navigate(Route.DeckSettings(it)) },
                                 onOpen = { nav.navigate(Route.Deck(it)) },
+                                onCustomStudy = { id, spec -> nav.navigate(Route.Review(id, custom = spec)) },
                             )
                         }
                         composable<Route.Browse> { entry ->
@@ -230,13 +232,15 @@ fun App(
                             )
                         }
                         composable<Route.Stats> { StatsScreen(onEdit = { nav.navigate(Route.Editor(noteId = it)) }) }
-                        composable<Route.Settings> { SettingsScreen() }
+                        composable<Route.Settings> { SettingsScreen(onNoteTypes = { nav.navigate(Route.NoteTypes) }) }
+                        composable<Route.NoteTypes> { NoteTypesScreen(onBack = { if (!nav.popBackStack()) goHome() }) }
                         composable<Route.Review> { entry ->
                             val route = entry.toRoute<Route.Review>()
                             ReviewScreen(
                                 deckId = route.deckId,
                                 weak = route.weak,
                                 layer = route.layer,
+                                custom = route.custom,
                                 onExit = { if (!nav.popBackStack()) goHome() },
                                 onEdit = { nav.navigate(Route.Editor(noteId = it)) },
                                 onSearch = { nav.navigate(Route.Browse()) },

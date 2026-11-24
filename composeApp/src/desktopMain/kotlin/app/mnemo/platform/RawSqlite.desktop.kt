@@ -47,3 +47,34 @@ actual class RawSqlite actual constructor(
 
     actual override fun close() = conn.close()
 }
+
+actual class SqliteWriter actual constructor(
+    path: String,
+) : AutoCloseable {
+    private val conn: Connection = DriverManager.getConnection("jdbc:sqlite:$path")
+
+    actual fun exec(
+        sql: String,
+        vararg args: Any?,
+    ) {
+        conn.prepareStatement(sql).use { st ->
+            args.forEachIndexed { i, a -> st.setObject(i + 1, a) }
+            st.execute()
+        }
+    }
+
+    actual fun transaction(block: () -> Unit) {
+        conn.autoCommit = false
+        try {
+            block()
+            conn.commit()
+        } catch (e: Throwable) {
+            conn.rollback()
+            throw e
+        } finally {
+            conn.autoCommit = true
+        }
+    }
+
+    actual override fun close() = conn.close()
+}

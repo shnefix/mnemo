@@ -1,0 +1,2 @@
+-- Anki-style flags: 0 none, 1 red, 2 orange, 3 green, 4 blue, 5 pink, 6 turquoise, 7 purple.
+ALTER TABLE card ADD COLUMN flag INTEGER NOT NULL DEFAULT 0;

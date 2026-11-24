@@ -44,6 +44,9 @@ data class BrowseUiState(
     val selected: Set<Long> = emptySet(),
     val decks: List<Deck> = emptyList(),
     val loading: Boolean = true,
+    val noteTypes: List<NoteType> = emptyList(),
+    /** The result of the last bulk action ("Flagged 3 cards"), shown briefly. */
+    val message: String? = null,
 ) {
     val hasMore: Boolean get() = rows.size < matched
 }
@@ -81,6 +84,7 @@ class BrowseViewModel(
     init {
         viewModelScope.launch {
             types = graph.notes.noteTypes().associateBy { it.id }
+            _state.update { it.copy(noteTypes = types.values.toList()) }
             // Reload only while the screen shows: once opened, this view model outlives the tab,
             // and reloading on every grade of a review session made answering cards stutter.
             // Coming back reloads once if anything changed in the meantime.
@@ -154,7 +158,8 @@ class BrowseViewModel(
             view = v,
             question =
                 plainText(
-                    rendered?.question ?: v.fields.values
+                    rendered?.occlusion?.let { o -> rendered.question.ifBlank { "Image occlusion · ${o.image}" } }
+                        ?: rendered?.question ?: v.fields.values
                         .firstOrNull()
                         .orEmpty(),
                 ),
@@ -223,6 +228,65 @@ class BrowseViewModel(
             _state.value.selected.forEach { graph.cards.reset(it, now) }
         }
     }
+
+    fun setFlag(flag: Int) {
+        viewModelScope.launch {
+            val ids = _state.value.selected
+            graph.cards.setFlag(ids, flag)
+            say(if (flag == 0) "Flag removed from ${ids.size} cards" else "Flagged ${ids.size} cards")
+        }
+    }
+
+    /** Anki's Set due date on the selection; false when [spec] can't be read. */
+    fun setDueDate(spec: String): Boolean {
+        if (app.mnemo.data.repo
+                .parseDueSpec(spec) == null
+        ) {
+            return false
+        }
+        viewModelScope.launch {
+            val n = graph.cards.setDueDate(_state.value.selected, spec, graph.clock.now()) ?: 0
+            say("Due date set on $n cards")
+        }
+        return true
+    }
+
+    fun reposition(how: app.mnemo.data.repo.CardRepository.Reposition) {
+        viewModelScope.launch {
+            val n = graph.cards.reposition(_state.value.selected, how)
+            say(if (n == 0) "Only new cards can be repositioned" else "Repositioned $n new cards")
+        }
+    }
+
+    /**
+     * Find and replace in the selected notes, or in every match when nothing is selected.
+     * Returns an error for a bad regular expression.
+     */
+    fun findReplace(
+        find: String,
+        replace: String,
+        field: String?,
+        regex: Boolean,
+        matchCase: Boolean,
+    ): String? {
+        if (regex) runCatching { Regex(find) }.onFailure { return "Not a valid regular expression: ${it.message}" }
+        val notes = if (_state.value.selected.isEmpty()) matches.map { it.noteId }.toSet() else selectedNoteIds()
+        viewModelScope.launch {
+            val n = graph.notes.findReplace(notes, find, replace, field, regex, matchCase)
+            say("Replaced in $n of ${notes.size} notes")
+        }
+        return null
+    }
+
+    /** Groups of notes whose [field] holds the same text. */
+    suspend fun duplicates(
+        type: NoteType,
+        field: String,
+    ): List<Pair<String, List<Long>>> = graph.notes.duplicates(type.id, field)
+
+    fun dismissMessage() = _state.update { it.copy(message = null) }
+
+    private fun say(text: String) = _state.update { it.copy(message = text) }
 
     fun deleteSelected() {
         viewModelScope.launch {

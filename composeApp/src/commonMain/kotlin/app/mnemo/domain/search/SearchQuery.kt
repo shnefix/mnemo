@@ -6,7 +6,9 @@ import app.mnemo.domain.model.EpochMillis
 
 /**
  * Anki-like search: `tag:x deck:y is:due is:new is:learn is:review is:suspended
- * is:leech "free text"`. Terms are ANDed; a leading `-` negates a term.
+ * is:leech "free text"`, plus `flag:1`, `rated:7[:1]`, `added:3`, `edited:3`,
+ * `introduced:7`, `prop:ivl>=10` (ivl, due, reps, lapses, s, d), `note:Name`,
+ * `card:2`, `nid:1,2` and `cid:1,2`. Terms are ANDed; a leading `-` negates a term.
  */
 data class SearchQuery(
     val terms: List<Term>,
@@ -33,6 +35,40 @@ data class SearchQuery(
             val text: String,
             override val negated: Boolean,
         ) : Term
+
+        /** `flag:`, `rated:`, `added:`, `edited:`, `introduced:`, `prop:`, `note:`, `card:`, `nid:`, `cid:`. */
+        data class Op(
+            val key: String,
+            val value: String,
+            override val negated: Boolean,
+        ) : Term
+    }
+
+    /** A `prop:` comparison such as `ivl>=10`. */
+    data class Prop(
+        val name: String,
+        val op: String,
+        val value: Double,
+    ) {
+        fun test(x: Double): Boolean =
+            when (op) {
+                "<" -> x < value
+                "<=" -> x <= value
+                ">" -> x > value
+                ">=" -> x >= value
+                "!=" -> x != value
+                else -> x == value
+            }
+
+        companion object {
+            private val pattern = Regex("^([a-z]+)(<=|>=|!=|=|<|>)(-?[0-9.]+)$")
+
+            fun parse(s: String): Prop? {
+                val m = pattern.find(s.lowercase()) ?: return null
+                val v = m.groupValues[3].toDoubleOrNull() ?: return null
+                return Prop(m.groupValues[1], m.groupValues[2], v)
+            }
+        }
     }
 
     fun matches(
@@ -64,10 +100,36 @@ data class SearchQuery(
                     else -> false
                 }
             is Term.Text -> card.fields.values.any { it.contains(term.text, ignoreCase = true) }
+            // In memory only what the card itself knows; dates and history need the database (Browse).
+            is Term.Op ->
+                when (term.key) {
+                    "flag" -> term.value.toIntOrNull() == card.card.flag
+                    "card" -> term.value.toIntOrNull() == card.card.templateIndex + 1
+                    "cid" -> ids(term.value).contains(card.card.id)
+                    "nid" -> ids(term.value).contains(card.card.noteId)
+                    "prop" -> {
+                        val p = Prop.parse(term.value)
+                        val c = card.card
+                        when (p?.name) {
+                            "ivl" -> c.state != CardState.New && p.test(c.scheduledDays.toDouble())
+                            "reps" -> p.test(c.reps.toDouble())
+                            "lapses" -> p.test(c.lapses.toDouble())
+                            "s" -> c.stability != null && p.test(c.stability)
+                            "d" -> c.difficulty != null && p.test((c.difficulty - 1.0) / 9.0)
+                            else -> false
+                        }
+                    }
+                    else -> false
+                }
         }
 
     companion object {
         val EMPTY = SearchQuery(emptyList())
+
+        private val OPS = setOf("flag", "rated", "added", "edited", "introduced", "prop", "note", "card", "nid", "cid")
+
+        /** `1,2,3` → ids. */
+        fun ids(value: String): Set<Long> = value.split(',').mapNotNull { it.trim().toLongOrNull() }.toSet()
 
         fun parse(input: String): SearchQuery {
             val terms = mutableListOf<Term>()
@@ -85,6 +147,7 @@ data class SearchQuery(
                             "tag" -> Term.Tag(value, negated)
                             "deck" -> Term.Deck(value, negated)
                             "is" -> Term.Is(value, negated)
+                            in OPS -> Term.Op(key, value, negated)
                             else -> Term.Text(token.trim('"'), negated)
                         }
                     } else {

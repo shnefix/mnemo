@@ -65,6 +65,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -98,6 +100,9 @@ import app.mnemo.platform.Speech
 import app.mnemo.platform.SpeechInput
 import app.mnemo.platform.isMobilePlatform
 import app.mnemo.platform.rememberSpeechInput
+import app.mnemo.ui.components.CardInfoDialog
+import app.mnemo.ui.components.FlagMark
+import app.mnemo.ui.components.FlagMenu
 import app.mnemo.ui.components.IconActionButton
 import app.mnemo.ui.components.Kbd
 import app.mnemo.ui.components.Layers
@@ -105,6 +110,7 @@ import app.mnemo.ui.components.MarkdownText
 import app.mnemo.ui.components.MnemoButton
 import app.mnemo.ui.components.MnemoIcons
 import app.mnemo.ui.components.MnemoTextField
+import app.mnemo.ui.components.OcclusionImage
 import app.mnemo.ui.nav.LocalWindowSize
 import app.mnemo.ui.nav.WindowSize
 import app.mnemo.ui.theme.MnemoColors
@@ -117,12 +123,14 @@ fun ReviewScreen(
     deckId: Long?,
     weak: Boolean = false,
     layer: String? = null,
+    custom: String? = null,
     onExit: () -> Unit,
     onEdit: (noteId: Long) -> Unit,
     onSearch: () -> Unit = {},
 ) {
     val graph = LocalAppGraph.current
-    val vm: ReviewViewModel = viewModel(key = "review-$deckId-$weak-$layer") { ReviewViewModel(graph, deckId, weak, layer) }
+    val vm: ReviewViewModel = viewModel(key = "review-$deckId-$weak-$layer-$custom") { ReviewViewModel(graph, deckId, weak, layer, custom) }
+    var infoCard by remember { mutableStateOf<Long?>(null) }
     val state by vm.state.collectAsState()
     val compact = LocalWindowSize.current == WindowSize.Compact
     val focus = remember { FocusRequester() }
@@ -165,7 +173,29 @@ fun ReviewScreen(
                 ) {
                     return@onPreviewKeyEvent false
                 }
+                // Ctrl+1…7 flags the card, as in Anki.
+                if (e.isCtrlPressed || e.isMetaPressed) {
+                    val flag =
+                        when (e.key) {
+                            Key.One -> 1
+                            Key.Two -> 2
+                            Key.Three -> 3
+                            Key.Four -> 4
+                            Key.Five -> 5
+                            Key.Six -> 6
+                            Key.Seven -> 7
+                            else -> 0
+                        }
+                    if (flag != 0) {
+                        vm.flagCurrent(flag)
+                        return@onPreviewKeyEvent true
+                    }
+                }
                 when (e.key) {
+                    Key.I -> {
+                        state.view?.let { infoCard = it.card.id }
+                        true
+                    }
                     Key.Spacebar, Key.Enter -> {
                         if (!state.revealed) vm.reveal() else vm.grade(state.suggested ?: Rating.Good)
                         true
@@ -220,6 +250,8 @@ fun ReviewScreen(
                 onEdit = { state.view?.let { onEdit(it.card.noteId) } },
                 onSuspend = vm::suspendCurrent,
                 onBury = vm::buryCurrent,
+                onFlag = vm::flagCurrent,
+                onInfo = { state.view?.let { infoCard = it.card.id } },
             )
             when {
                 state.loading -> Box(Modifier.fillMaxSize())
@@ -292,6 +324,7 @@ fun ReviewScreen(
             }
         }
     }
+    infoCard?.let { id -> CardInfoDialog(id, onDismiss = { infoCard = null }) }
 }
 
 @Composable
@@ -304,9 +337,12 @@ private fun ReviewTopBar(
     onEdit: () -> Unit,
     onSuspend: () -> Unit,
     onBury: () -> Unit,
+    onFlag: (Int) -> Unit,
+    onInfo: () -> Unit,
 ) {
     var modeMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
+    var flagMenu by remember { mutableStateOf(false) }
 
     @Suppress("DEPRECATION")
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -418,6 +454,14 @@ private fun ReviewTopBar(
                         }
                     clipboard.setText(AnnotatedString(text))
                 }
+                MoreItem("Flag card", MnemoIcons.Flag) {
+                    moreMenu = false
+                    flagMenu = true
+                }
+                MoreItem("Card info", MnemoIcons.Info) {
+                    moreMenu = false
+                    onInfo()
+                }
                 MoreItem("Bury until tomorrow", MnemoIcons.Clock) {
                     moreMenu = false
                     onBury()
@@ -430,6 +474,10 @@ private fun ReviewTopBar(
                     moreMenu = false
                     onSearch()
                 }
+            }
+            FlagMenu(flagMenu, state.view?.card?.flag, onDismiss = { flagMenu = false }) {
+                flagMenu = false
+                onFlag(if (it == 0) state.view?.card?.flag ?: 0 else it)
             }
         }
     }
@@ -606,7 +654,15 @@ private fun CardFace(
                         textAlign = TextAlign.Center,
                     )
                 val simple = if (short) remember(question) { inlineMarkdown(question) } else null
+                val occlusion = rendered?.occlusion
                 when {
+                    occlusion != null -> {
+                        if (question.isNotBlank()) {
+                            CardText(question, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 19.sp, lineHeight = 28.sp))
+                            Spacer(Modifier.height(14.dp))
+                        }
+                        OcclusionImage(occlusion, revealed = false)
+                    }
                     // Plain text with bold / italics: drawn here so every line is centred.
                     simple != null -> Text(simple, style = big, color = MnemoColors.text, modifier = Modifier.fillMaxWidth())
                     short -> CardText(question, style = big)
@@ -642,7 +698,18 @@ private fun CardFace(
             Spacer(Modifier.height(16.dp))
             // The question again, small: a reminder of what was asked. A cloze answer already
             // is the whole sentence, so it doesn't need one.
-            if (view.noteKind != NoteKind.Cloze) {
+            if (rendered?.occlusion != null) {
+                if (rendered.question.isNotBlank()) {
+                    CardText(
+                        rendered.question,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, lineHeight = 23.sp),
+                        color = MnemoColors.text2,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
+                Box(rise(0)) { OcclusionImage(rendered.occlusion, revealed = true) }
+                Spacer(Modifier.height(16.dp))
+            } else if (view.noteKind != NoteKind.Cloze && rendered?.answerHasQuestion != true) {
                 CardText(
                     rendered?.question.orEmpty().replace("[...]", "\\_\\_\\_\\_"),
                     style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, lineHeight = 23.sp),
@@ -719,6 +786,10 @@ private fun CardMeta(state: ReviewUiState) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
         Spacer(Modifier.width(8.dp))
         Text(label, style = MaterialTheme.typography.labelLarge, color = MnemoColors.text2)
+        if (card.flag != 0) {
+            Spacer(Modifier.width(8.dp))
+            FlagMark(card.flag)
+        }
         val kind = state.view.noteKind.displayName
         if (kind.isNotBlank()) {
             Text("  ·  $kind", style = MaterialTheme.typography.labelLarge, color = MnemoColors.text2)

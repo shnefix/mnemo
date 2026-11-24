@@ -20,3 +20,8 @@ actual fun foldDiacritics(s: String): String =
         .replace("Đ", "D")
         .replace("ł", "l")
         .replace("Ł", "L")
+
+actual fun sha1(bytes: ByteArray): ByteArray =
+    java.security.MessageDigest
+        .getInstance("SHA-1")
+        .digest(bytes)

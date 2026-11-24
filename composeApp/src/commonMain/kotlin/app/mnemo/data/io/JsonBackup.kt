@@ -7,6 +7,7 @@ import app.mnemo.data.db.encodeTags
 import app.mnemo.data.db.json
 import app.mnemo.di.AppGraph
 import app.mnemo.domain.model.DeckSettings
+import app.mnemo.domain.model.NoteKind
 import app.mnemo.platform.SystemClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -80,6 +81,7 @@ object JsonBackup {
         val suspended: Long,
         val buriedUntil: Long?,
         val learningStep: Long?,
+        val flag: Long = 0,
     )
 
     @Serializable data class BLog(
@@ -237,6 +239,7 @@ object JsonBackup {
                         it.suspended,
                         it.buried_until,
                         it.learning_step,
+                        it.flag,
                     )
                 },
             reviewLogs =
@@ -310,11 +313,16 @@ object JsonBackup {
             val db = graph.db
             var imported = 0
             db.transaction {
-                // Note types: match by kind.
+                // Note types: built-in ones match by kind, your own ("custom") by name.
                 val existingTypes = db.noteTypeQueries.selectAll().executeAsList()
                 val typeMap = HashMap<Long, Long>()
                 backup.noteTypes.forEach { t ->
-                    val match = existingTypes.firstOrNull { it.kind == t.kind }
+                    val match =
+                        if (t.kind == NoteKind.Custom.code) {
+                            existingTypes.firstOrNull { it.kind == t.kind && it.name == t.name }
+                        } else {
+                            existingTypes.firstOrNull { it.kind == t.kind }
+                        }
                     typeMap[t.id] =
                         match?.id ?: run {
                             db.noteTypeQueries.insert(t.name, t.kind, t.fieldsJson, t.templatesJson)
@@ -444,6 +452,10 @@ object JsonBackup {
                                 )
                                 db.cardQueries.setSuspended(c.suspended, local.id)
                                 db.cardQueries.setBuried(c.buriedUntil, local.id)
+                                db.cardQueries.setFlag(c.flag, local.id)
+                            } else if (local.flag == 0L && c.flag != 0L) {
+                                // A flag set on the other device since (setting one doesn't move the review time).
+                                db.cardQueries.setFlag(c.flag, local.id)
                             }
                             return@forEach
                         }
@@ -466,6 +478,7 @@ object JsonBackup {
                     )
                     if (c.suspended != 0L) db.cardQueries.setSuspended(1L, id)
                     if (c.buriedUntil != null) db.cardQueries.setBuried(c.buriedUntil, id)
+                    if (c.flag != 0L) db.cardQueries.setFlag(c.flag, id)
                 }
                 backup.reviewLogs.forEach { l ->
                     val card = cardMap[l.cardId] ?: return@forEach

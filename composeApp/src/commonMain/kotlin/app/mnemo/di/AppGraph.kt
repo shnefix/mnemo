@@ -12,6 +12,7 @@ import app.mnemo.db.MnemoDatabase
 import app.mnemo.domain.model.DeckSettings
 import app.mnemo.domain.scheduler.Fsrs
 import app.mnemo.domain.scheduler.FsrsParameters
+import app.mnemo.domain.scheduler.LoadBalancer
 import app.mnemo.domain.scheduler.Scheduler
 import app.mnemo.platform.Clock
 import app.mnemo.platform.Prefs
@@ -42,7 +43,10 @@ class AppGraph(
 
     val usesCustomParameters: Boolean get() = !fsrs.parameters.w.contentEquals(FsrsParameters.DEFAULT.w)
 
-    fun scheduler(settings: DeckSettings): Scheduler = Scheduler(fsrs, settings, fuzz)
+    fun scheduler(
+        settings: DeckSettings,
+        balancer: LoadBalancer? = null,
+    ): Scheduler = Scheduler(fsrs, settings, fuzz, balancer)
 
     fun setParameters(parameters: FsrsParameters?) {
         fsrs = Fsrs(parameters ?: FsrsParameters.DEFAULT)

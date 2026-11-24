@@ -47,6 +47,10 @@ enum class NoteKind(
     Cloze("cloze", "Cloze"),
     TypeAnswer("type", "Type the answer"),
     Vocab("vocab", "Vocabulary"),
+    Occlusion("occlusion", "Image occlusion"),
+
+    /** A note type you made yourself: your own fields and `{{Field}}` card templates. */
+    Custom("custom", "Custom"),
     ;
 
     companion object {
@@ -85,7 +89,59 @@ data class DeckSettings(
     /** Hold new cards whose concept prerequisites are below 70% mastery. */
     val gatePrerequisites: Boolean = false,
     val maximumIntervalDays: Int = 36_500,
-)
+    /** The order new cards come in. */
+    val newOrder: NewOrder = NewOrder.Added,
+    /** Answering a card holds its note's other new cards until tomorrow (and only one comes per day). */
+    val buryNewSiblings: Boolean = true,
+    /** The same for review cards of the same note. */
+    val buryReviewSiblings: Boolean = true,
+    /** Picks the quietest day within an interval's fuzz range, so review days even out. */
+    val loadBalance: Boolean = true,
+    /** Review load per weekday, Monday first: 1 normal, 0.5 reduced, 0 as few as possible. */
+    val easyDays: List<Double> = List(7) { 1.0 },
+    /** The shared preset these settings belong to (decks with the same preset change together). */
+    val preset: String? = null,
+) {
+    /** True when some weekday is set lighter than normal. */
+    val hasEasyDays: Boolean get() = easyDays.size == 7 && easyDays.any { it < 1.0 }
+
+    /**
+     * These settings with the preset's scheduling options, keeping what belongs to this deck
+     * alone (its language, review mode and graph gating).
+     */
+    fun withPreset(preset: DeckSettings): DeckSettings =
+        preset.copy(language = language, mode = mode, varyQuestions = varyQuestions, gatePrerequisites = gatePrerequisites)
+}
+
+@Serializable
+enum class NewOrder(
+    val label: String,
+) {
+    /** In the order they were added (or as repositioned). */
+    Added("In order added"),
+
+    /** Shuffled; the order stays the same for the whole day. */
+    Random("Random"),
+}
+
+/** Anki's card flags, by number (0 = none). */
+enum class Flag(
+    val number: Int,
+    val label: String,
+) {
+    Red(1, "Red"),
+    Orange(2, "Orange"),
+    Green(3, "Green"),
+    Blue(4, "Blue"),
+    Pink(5, "Pink"),
+    Turquoise(6, "Turquoise"),
+    Purple(7, "Purple"),
+    ;
+
+    companion object {
+        fun of(number: Int): Flag? = entries.firstOrNull { it.number == number }
+    }
+}
 
 data class Deck(
     val id: Long,
@@ -141,6 +197,8 @@ data class Card(
     val buriedUntil: EpochMillis?,
     /** Index into learning/relearning steps while in a learning state. */
     val learningStep: Int?,
+    /** Anki flag colour, 0 = none (see [Flag]). */
+    val flag: Int = 0,
 ) {
     val isNew: Boolean get() = state == CardState.New
 

@@ -1,5 +1,29 @@
 # Progress
 
+## Done — Anki parity (24 Nov 2026)
+
+- **Bury siblings**: one card per note a day for new cards and reviews (deck settings, on by
+  default); answering buries the note's other cards until tomorrow; undo brings them back.
+- **New-card order**: in order added or random (stable for the day); **Reposition** and
+  **Set due date** (`0`, `3`, `1-7`, `30!`) in Browse.
+- **Flags** 1–7 (schema v3, `2.sqm`): `Ctrl+1–7` in review, Browse filter and `flag:` search.
+- **Card info** (`I` in review, Info in Browse): stats and the full review history.
+- **Custom study** (`domain/review/CustomStudy.kt`): forgotten, ahead, extra new, preview (changes
+  nothing) and study-by-search with or without rescheduling — a one-off session, no filtered deck.
+- **Export** `.apkg` (Anki schema 11, with or without scheduling) and CSV (`data/io/ApkgExporter.kt`,
+  `CsvExporter.kt`).
+- **Custom note types** (`domain/cards/Templates.kt`, Settings › Note types): fields and templates
+  with `{{Field}}`, `{{#Field}}…{{/Field}}`, `{{^Field}}`, `{{FrontSide}}`, `{{type:Field}}`.
+- **Image occlusion** (`domain/cards/Occlusion.kt`): draw masks, group them, hide all or one;
+  imports and exports Anki's image-occlusion notes.
+- **Find and replace** (plain or regex, one field or all) and **find duplicates** in Browse.
+- **Search operators**: `flag: rated: added: edited: introduced: prop: note: card: nid: cid:`.
+- **Load balancing and easy days**: the scheduler picks the quietest day in the fuzz range and
+  avoids days marked easy.
+- **Deck presets**: decks sharing a preset name share options; saving one updates the others.
+- **Sticky fields** in the editor and the last note type remembered.
+- Tests: `AnkiFeaturesTest`.
+
 ## Done — Smoothness and safety (18 Nov 2026)
 
 - **Speed**: Today and Decks compute due counts, card counts and mastery for every deck from a
@@ -123,6 +147,9 @@
 
 ## Known issues / gaps
 
+- Custom note types sync to other phones when first created, but later template edits do not.
+  Exported `.apkg` files are checked by re-importing them here, not yet in Anki itself.
+  Imported image-occlusion notes keep their cards but not Anki's review history for them.
 - `.apkg` import maps note types by shape: Basic-like types with more than two fields fold the
   extra fields into Back with their names; custom templates (CSS, conditional sections) are
   not reproduced. Scheduler values for learning cards are approximate.

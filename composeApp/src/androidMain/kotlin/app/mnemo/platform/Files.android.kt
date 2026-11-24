@@ -167,10 +167,27 @@ private fun ownDownloads(): List<Pair<Uri, String>> {
 }
 
 /** Writes [content] to Download/Mnemo/[name]; null on Android 9 and older (that needs a storage permission). */
+actual suspend fun saveBinaryFile(
+    suggestedName: String,
+    bytes: ByteArray,
+    mimeType: String,
+): String? =
+    withContext(Dispatchers.IO) {
+        runCatching { writeToDownloads(suggestedName, bytes, replace = true, mimeType = mimeType) }.getOrNull()
+            ?: File(appDataDir(), suggestedName).also { it.writeBytes(bytes) }.absolutePath
+    }
+
 private fun writeToDownloads(
     name: String,
     content: String,
     replace: Boolean,
+): String? = writeToDownloads(name, content.encodeToByteArray(), replace, "application/json")
+
+private fun writeToDownloads(
+    name: String,
+    content: ByteArray,
+    replace: Boolean,
+    mimeType: String,
 ): String? {
     if (Build.VERSION.SDK_INT < 29) return null
     val resolver = appContext.contentResolver
@@ -179,11 +196,11 @@ private fun writeToDownloads(
     val values =
         ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-            put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
             put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$DOWNLOAD_DIR")
         }
     val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
-    resolver.openOutputStream(uri)?.use { it.write(content.encodeToByteArray()) } ?: return null
+    resolver.openOutputStream(uri)?.use { it.write(content) } ?: return null
     return "Download/$DOWNLOAD_DIR/$name"
 }
 

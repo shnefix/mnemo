@@ -91,3 +91,12 @@ UPDATE note SET updated_at = created_at WHERE id IN ?;
 
 pruneTombstones:
 DELETE FROM deleted_note WHERE deleted_at < ?;
+
+selectByType:
+SELECT * FROM note WHERE note_type_id = ?;
+
+selectByIds:
+SELECT * FROM note WHERE id IN ?;
+
+updateFields:
+UPDATE note SET fields_json = ?, updated_at = ? WHERE id = ?;

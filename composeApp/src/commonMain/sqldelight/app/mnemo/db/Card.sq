@@ -13,7 +13,8 @@ CREATE TABLE card (
     last_review INTEGER,
     suspended INTEGER NOT NULL DEFAULT 0,
     buried_until INTEGER,
-    learning_step INTEGER
+    learning_step INTEGER,
+    flag INTEGER NOT NULL DEFAULT 0            -- 0 none, 1-7 Anki flag colours
 );
 
 CREATE INDEX card_note ON card(note_id);
@@ -66,12 +67,19 @@ WHERE note.deck_id IN ? AND card.suspended = 0
   AND card.due <= :now
 ORDER BY CASE card.state WHEN 1 THEN 0 WHEN 3 THEN 0 WHEN 2 THEN 1 ELSE 2 END, card.due;
 
+-- New cards in [deckIds], in the deck's order: by position (`due`, the time a new card was added
+-- unless repositioned) or in a shuffled order that stays the same all day (:seed = day number).
+-- With :onePerNote = 1 only the first available card of each note comes (siblings are buried).
 newCards:
 SELECT card.* FROM card
 JOIN note ON note.id = card.note_id
 WHERE note.deck_id IN ? AND card.suspended = 0 AND card.state = 0
   AND (card.buried_until IS NULL OR card.buried_until <= :now)
-ORDER BY card.id
+  AND (:onePerNote = 0 OR card.id = (
+    SELECT min(c2.id) FROM card c2
+    WHERE c2.note_id = card.note_id AND c2.state = 0 AND c2.suspended = 0
+      AND (c2.buried_until IS NULL OR c2.buried_until <= :now)))
+ORDER BY CASE WHEN :shuffled = 1 THEN (card.id * 1103515245 + :seed) % 2147483647 ELSE card.due END, card.id
 LIMIT :limit;
 
 countByStateDue:
@@ -116,6 +124,28 @@ UPDATE card SET suspended = ? WHERE id = ?;
 setBuried:
 UPDATE card SET buried_until = ? WHERE id = ?;
 
+setFlag:
+UPDATE card SET flag = ? WHERE id = ?;
+
+-- A new card's place in the new-card queue (its `due`).
+setPosition:
+UPDATE card SET due = ? WHERE id = ?;
+
+-- The lowest and highest new-card positions, for "move to front / end".
+newPositionRange:
+SELECT min(due) AS lo, max(due) AS hi FROM card WHERE state = 0;
+
+-- Due dates of every scheduled card, for spreading new intervals over quiet days.
+scheduledDues:
+SELECT due FROM card WHERE state != 0 AND suspended = 0;
+
+deleteByTypeTemplate:
+DELETE FROM card WHERE template_index = :index AND note_id IN (SELECT id FROM note WHERE note_type_id = :typeId);
+
+shiftTemplatesDown:
+UPDATE card SET template_index = template_index - 1
+WHERE template_index > :index AND note_id IN (SELECT id FROM note WHERE note_type_id = :typeId);
+
 resetCard:
 UPDATE card SET state = 0, due = ?, stability = NULL, difficulty = NULL, elapsed_days = 0, scheduled_days = 0,
     reps = 0, lapses = 0, last_review = NULL, learning_step = NULL WHERE id = ?;
@@ -141,9 +171,13 @@ cardDecks:
 SELECT card.id, note.deck_id, note.tags FROM card
 JOIN note ON note.id = card.note_id;
 
--- New cards available now, per deck (the per-deck counterpart of newCards).
+deckOfCards:
+SELECT card.id, note.deck_id FROM card JOIN note ON note.id = card.note_id WHERE card.id IN ?;
+
+-- New cards available now, per deck (the per-deck counterpart of newCards); `notes` counts
+-- one card per note, for decks that bury siblings.
 newCountByDeck:
-SELECT note.deck_id, count(*) AS n FROM card
+SELECT note.deck_id, count(*) AS n, count(DISTINCT card.note_id) AS notes FROM card
 JOIN note ON note.id = card.note_id
 WHERE card.suspended = 0 AND card.state = 0
   AND (card.buried_until IS NULL OR card.buried_until <= :now)
@@ -151,7 +185,7 @@ GROUP BY note.deck_id;
 
 -- Learning/review cards due now, per deck and state (the per-deck counterpart of countByStateDue).
 dueCountByDeck:
-SELECT note.deck_id, card.state, count(*) AS n FROM card
+SELECT note.deck_id, card.state, count(*) AS n, count(DISTINCT card.note_id) AS notes FROM card
 JOIN note ON note.id = card.note_id
 WHERE card.suspended = 0
   AND (card.buried_until IS NULL OR card.buried_until <= :now)
@@ -162,7 +196,7 @@ GROUP BY note.deck_id, card.state;
 -- without exporting the collection: lets a sync skip the export and upload when nothing moved.
 syncFingerprint:
 SELECT
-  (SELECT count(*) || ':' || total(due) || ':' || total(state) || ':' || total(suspended) || ':' || total(coalesce(buried_until, 0)) || ':' || total(reps) FROM card) AS cards,
+  (SELECT count(*) || ':' || total(due) || ':' || total(state) || ':' || total(suspended) || ':' || total(coalesce(buried_until, 0)) || ':' || total(reps) || ':' || total(flag) FROM card) AS cards,
   (SELECT count(*) || ':' || coalesce(max(updated_at), 0) || ':' || total(length(fields_json) + length(tags)) FROM note) AS notes,
   (SELECT count(*) || ':' || coalesce(max(reviewed_at), 0) FROM review_log) AS logs,
   (SELECT count(*) || ':' || coalesce(group_concat(id || name || coalesce(parent_id, '') || settings_json, '|'), '') FROM deck) AS decks,

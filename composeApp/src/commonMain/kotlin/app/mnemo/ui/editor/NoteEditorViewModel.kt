@@ -8,6 +8,7 @@ import app.mnemo.domain.cards.RenderedCard
 import app.mnemo.domain.model.Deck
 import app.mnemo.domain.model.NoteKind
 import app.mnemo.domain.model.NoteType
+import app.mnemo.platform.Prefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,8 @@ data class EditorUiState(
     val savedCount: Int = 0,
     val lastSavedMessage: String? = null,
     val error: String? = null,
+    /** Fields pinned to keep their text for the next note (Anki's sticky fields). */
+    val sticky: Set<String> = emptySet(),
 ) {
     val canSave: Boolean get() = deck != null && noteType != null && fields.values.any { it.isNotBlank() } && previews.isNotEmpty()
 
@@ -69,7 +72,9 @@ class NoteEditorViewModel(
                 return
             }
         }
-        val type = types.firstOrNull { it.kind == NoteKind.Basic } ?: types.firstOrNull()
+        // The note type used last time, as in Anki.
+        val lastType = Prefs.get(Prefs.EDITOR_LAST_TYPE)?.toLongOrNull()
+        val type = types.firstOrNull { it.id == lastType } ?: types.firstOrNull { it.kind == NoteKind.Basic } ?: types.firstOrNull()
         _state.value =
             EditorUiState(
                 loading = false,
@@ -78,6 +83,7 @@ class NoteEditorViewModel(
                 deck = decks.firstOrNull { it.id == initialDeckId } ?: decks.firstOrNull(),
                 noteType = type,
                 fields = type?.fields?.associateWith { "" } ?: emptyMap(),
+                sticky = type?.let { stickyOf(it) } ?: emptySet(),
             )
     }
 
@@ -86,7 +92,25 @@ class NoteEditorViewModel(
     fun selectNoteType(type: NoteType) =
         _state.update { s ->
             val fields = type.fields.associateWith { f -> s.fields[f] ?: s.fields.values.elementAtOrNull(type.fields.indexOf(f)) ?: "" }
-            s.copy(noteType = type, fields = fields)
+            if (s.editingNoteId == null) Prefs.set(Prefs.EDITOR_LAST_TYPE, type.id.toString())
+            s.copy(noteType = type, fields = fields, sticky = stickyOf(type))
+        }
+
+    private fun stickyOf(type: NoteType): Set<String> =
+        Prefs
+            .get(Prefs.EDITOR_STICKY + type.id)
+            ?.split('\u001f')
+            ?.filter { it in type.fields }
+            ?.toSet()
+            .orEmpty()
+
+    /** Pins or unpins [field]: a pinned field keeps its text for the next note. */
+    fun toggleSticky(field: String) =
+        _state.update { s ->
+            val type = s.noteType ?: return@update s
+            val next = if (field in s.sticky) s.sticky - field else s.sticky + field
+            Prefs.set(Prefs.EDITOR_STICKY + type.id, next.joinToString("\u001f"))
+            s.copy(sticky = next)
         }
 
     fun setField(
@@ -116,7 +140,7 @@ class NoteEditorViewModel(
                     if (another) {
                         _state.update {
                             it.copy(
-                                fields = type.fields.associateWith { "" },
+                                fields = type.fields.associateWith { f -> if (f in it.sticky) it.fields[f].orEmpty() else "" },
                                 savedCount = it.savedCount + 1,
                                 lastSavedMessage = "Saved · $n card${if (n == 1) "" else "s"} added to ${deck.path}",
                             )

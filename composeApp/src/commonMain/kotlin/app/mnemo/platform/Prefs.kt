@@ -68,4 +68,10 @@ object Prefs {
     const val FSRS_PARAMS = "fsrs.params"
     const val DAY_START_HOUR = "day.start.hour"
     const val REMINDER_HOUR = "reminder.hour"
+
+    /** The note type last used to add cards. */
+    const val EDITOR_LAST_TYPE = "editor.last.type"
+
+    /** Fields that keep their text after "Save & add another", per note type: `editor.sticky.<typeId>`. */
+    const val EDITOR_STICKY = "editor.sticky."
 }

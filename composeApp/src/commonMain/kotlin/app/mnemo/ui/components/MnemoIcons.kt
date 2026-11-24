@@ -292,6 +292,32 @@ object MnemoIcons {
         }
     }
 
+    val Flag: ImageVector by lazy {
+        stroke("Flag") {
+            moveTo(5f, 21f)
+            lineTo(5f, 4f)
+            moveTo(5f, 4f)
+            curveTo(9f, 1.5f, 12f, 6.5f, 19f, 4f)
+            lineTo(19f, 13f)
+            curveTo(12f, 15.5f, 9f, 10.5f, 5f, 13f)
+        }
+    }
+
+    val Info: ImageVector by lazy {
+        stroke("Info") {
+            moveTo(12f, 3f)
+            curveTo(17f, 3f, 21f, 7f, 21f, 12f)
+            curveTo(21f, 17f, 17f, 21f, 12f, 21f)
+            curveTo(7f, 21f, 3f, 17f, 3f, 12f)
+            curveTo(3f, 7f, 7f, 3f, 12f, 3f)
+            close()
+            moveTo(12f, 11f)
+            lineTo(12f, 16f)
+            moveTo(12f, 8f)
+            lineTo(12.01f, 8f)
+        }
+    }
+
     val Import: ImageVector by lazy {
         stroke("Import") {
             moveTo(12f, 4f)

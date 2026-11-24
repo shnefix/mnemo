@@ -94,7 +94,7 @@ fun longestStreak(reviewDays: Set<LocalDate>): Int {
 
 private fun LocalDate.minusDays(n: Int): LocalDate = LocalDate.fromEpochDays(this.toEpochDays() - n)
 
-private fun LocalDate.plusDays(n: Int): LocalDate = LocalDate.fromEpochDays(this.toEpochDays() + n)
+fun LocalDate.plusDays(n: Int): LocalDate = LocalDate.fromEpochDays(this.toEpochDays() + n)
 
 /** Review counts keyed by local date, from the raw UTC day buckets plus their timestamps. */
 fun reviewsByLocalDate(daily: List<DailyReviews>): Map<LocalDate, Int> =

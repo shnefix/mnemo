@@ -37,3 +37,28 @@ actual class RawSqlite actual constructor(
 
     actual override fun close() = db.close()
 }
+
+actual class SqliteWriter actual constructor(
+    path: String,
+) : AutoCloseable {
+    private val db: SQLiteDatabase = SQLiteDatabase.openOrCreateDatabase(path, null)
+
+    actual fun exec(
+        sql: String,
+        vararg args: Any?,
+    ) {
+        if (args.isEmpty()) db.execSQL(sql) else db.execSQL(sql, args)
+    }
+
+    actual fun transaction(block: () -> Unit) {
+        db.beginTransaction()
+        try {
+            block()
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    actual override fun close() = db.close()
+}

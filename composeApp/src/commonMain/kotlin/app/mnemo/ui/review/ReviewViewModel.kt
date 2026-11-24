@@ -12,6 +12,7 @@ import app.mnemo.domain.model.NoteType
 import app.mnemo.domain.model.Rating
 import app.mnemo.domain.model.ReviewMode
 import app.mnemo.domain.review.AnswerMatcher
+import app.mnemo.domain.review.CustomStudy
 import app.mnemo.domain.review.ReviewSession
 import app.mnemo.domain.scheduler.Scheduled
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +47,8 @@ data class ReviewUiState(
     val sessionAgain: Int = 0,
     /** The current card's deck leech threshold, for the Leech pill. */
     val leechThreshold: Int = 8,
+    /** A preview (custom study without rescheduling): grades change nothing. */
+    val previewOnly: Boolean = false,
 ) {
     val progress: Float get() = if (total == 0) 0f else done.toFloat() / total
 
@@ -67,6 +70,8 @@ class ReviewViewModel(
     private val deckId: Long?,
     private val weak: Boolean = false,
     private val layer: String? = null,
+    /** A custom-study session ([CustomStudy.encode]) instead of what is due. */
+    private val custom: String? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ReviewUiState())
     val state: StateFlow<ReviewUiState> = _state.asStateFlow()
@@ -79,21 +84,23 @@ class ReviewViewModel(
         viewModelScope.launch {
             types = graph.notes.noteTypes().associateBy { it.id }
             val deck = deckId?.let { graph.decks.byId(it) }
+            val study = custom?.let { CustomStudy.decode(it) }
             session =
-                if (weak) {
-                    ReviewSession(graph, null, WeakSpots.sessionCards(graph, graph.clock.now()))
-                } else {
-                    ReviewSession(graph, deckId, states = layerStates(layer))
+                when {
+                    study != null -> ReviewSession(graph, deckId, CustomStudy.cardIds(graph, deckId, study), reschedule = study.reschedules)
+                    weak -> ReviewSession(graph, null, WeakSpots.sessionCards(graph, graph.clock.now()))
+                    else -> ReviewSession(graph, deckId, states = layerStates(layer))
                 }
             session.load()
             _state.update {
                 it.copy(
                     deckName =
-                        if (weak) {
-                            "Weak spots"
-                        } else {
-                            (deck?.path ?: "All decks") + (layer?.let { " · $it only" } ?: "")
+                        when {
+                            study != null -> (deck?.path ?: "All decks") + " · " + study.title
+                            weak -> "Weak spots"
+                            else -> (deck?.path ?: "All decks") + (layer?.let { " · $it only" } ?: "")
                         },
+                    previewOnly = !session.reschedule,
                     mode = deck?.settings?.mode ?: ReviewMode.Classic,
                     language = deck?.settings?.language,
                 )
@@ -193,7 +200,11 @@ class ReviewViewModel(
             val label = result?.intervalLabel ?: ""
             _state.update {
                 it.copy(
-                    toast = "${rating.label} · next in $label" + if (overrode) " · override logged" else "",
+                    toast =
+                        when {
+                            !session.reschedule -> if (rating == Rating.Again) "Again · shown once more" else "Practice · not scheduled"
+                            else -> "${rating.label} · next in $label" + if (overrode) " · override logged" else ""
+                        },
                     sessionCorrect = it.sessionCorrect + if (rating != Rating.Again) 1 else 0,
                     sessionAgain = it.sessionAgain + if (rating == Rating.Again) 1 else 0,
                 )
@@ -234,6 +245,19 @@ class ReviewViewModel(
             if (session.suspendCurrent()) {
                 _state.update { it.copy(toast = "Card suspended") }
                 showNext()
+            }
+        }
+    }
+
+    /** Toggles flag [number] on the current card (the same flag again clears it). */
+    fun flagCurrent(number: Int) {
+        viewModelScope.launch {
+            val flag = session.flagCurrent(number) ?: return@launch
+            _state.update { s ->
+                s.copy(
+                    view = s.view?.let { v -> v.copy(card = v.card.copy(flag = flag)) },
+                    toast = if (flag == 0) "Flag removed" else "${app.mnemo.domain.model.Flag.of(flag)?.label} flag",
+                )
             }
         }
     }

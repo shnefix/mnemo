@@ -55,14 +55,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.mnemo.LocalAppGraph
+import app.mnemo.data.repo.CardRepository
 import app.mnemo.domain.model.CardState
 import app.mnemo.domain.model.DAY_MS
 import app.mnemo.domain.search.SortKey
+import app.mnemo.ui.components.CardInfoDialog
 import app.mnemo.ui.components.EmptyState
+import app.mnemo.ui.components.FlagMark
+import app.mnemo.ui.components.FlagMenu
 import app.mnemo.ui.components.Layers
 import app.mnemo.ui.components.MnemoButton
 import app.mnemo.ui.components.MnemoIcons
 import app.mnemo.ui.components.MnemoTextField
+import app.mnemo.ui.components.flagColor
 import app.mnemo.ui.decks.NameDialog
 import app.mnemo.ui.nav.LocalWindowSize
 import app.mnemo.ui.nav.WindowSize
@@ -85,6 +90,7 @@ private val filters =
         Filter("Review", "is:review") { Layers.dot(CardState.Review) },
         Filter("Suspended", "is:suspended") { null },
         Filter("Leeches", "is:leech") { null },
+        Filter("Flagged", "-flag:0") { flagColor(1) },
     )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -108,6 +114,19 @@ fun BrowseScreen(
     var deckMenu by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     var help by remember { mutableStateOf(false) }
+    var flagMenu by remember { mutableStateOf(false) }
+    var repositionMenu by remember { mutableStateOf(false) }
+    var toolsMenu by remember { mutableStateOf(false) }
+    var setDue by remember { mutableStateOf(false) }
+    var replaceDialog by remember { mutableStateOf(false) }
+    var dupesDialog by remember { mutableStateOf(false) }
+    var infoCard by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(state.message) {
+        if (state.message != null) {
+            kotlinx.coroutines.delay(2500)
+            vm.dismissMessage()
+        }
+    }
     // The search is three parts: typed text, one filter chip and one deck. A deck page opens Browse
     // with `deck:"…"` already set.
     var text by rememberSaveable { mutableStateOf("") }
@@ -157,6 +176,30 @@ fun BrowseScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Text("?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MnemoColors.text2)
+            }
+            Spacer(Modifier.width(8.dp))
+            Box {
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MnemoColors.surface2)
+                        .clickable(role = Role.Button) { toolsMenu = true }
+                        .semantics { contentDescription = "More tools" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(MnemoIcons.More, contentDescription = null, tint = MnemoColors.text2, modifier = Modifier.size(20.dp))
+                }
+                DropdownMenu(expanded = toolsMenu, onDismissRequest = { toolsMenu = false }) {
+                    DropdownMenuItem(text = { Text("Find and replace…") }, onClick = {
+                        toolsMenu = false
+                        replaceDialog = true
+                    })
+                    DropdownMenuItem(text = { Text("Find duplicates…") }, onClick = {
+                        toolsMenu = false
+                        dupesDialog = true
+                    })
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -224,6 +267,33 @@ fun BrowseScreen(
                         }
                     }
                 }
+                if (state.selected.size == 1) {
+                    MnemoButton("Info", onClick = { infoCard = state.selected.first() }, height = 36.dp, icon = MnemoIcons.Info)
+                }
+                Box {
+                    MnemoButton("Flag", onClick = { flagMenu = true }, height = 36.dp, icon = MnemoIcons.Flag)
+                    FlagMenu(flagMenu, null, onDismiss = { flagMenu = false }) {
+                        flagMenu = false
+                        vm.setFlag(it)
+                    }
+                }
+                MnemoButton("Set due", onClick = { setDue = true }, height = 36.dp)
+                Box {
+                    MnemoButton("Reposition", onClick = { repositionMenu = true }, height = 36.dp)
+                    DropdownMenu(expanded = repositionMenu, onDismissRequest = { repositionMenu = false }) {
+                        listOf(
+                            "Move to front of new cards" to CardRepository.Reposition.Front,
+                            "Move to end of new cards" to CardRepository.Reposition.End,
+                            "Shuffle" to CardRepository.Reposition.Shuffle,
+                        ).forEach { (label, how) ->
+                            DropdownMenuItem(text = { Text(label) }, onClick = {
+                                repositionMenu = false
+                                vm.reposition(how)
+                            })
+                        }
+                    }
+                }
+                MnemoButton("Replace", onClick = { replaceDialog = true }, height = 36.dp)
                 MnemoButton("Suspend", onClick = { vm.setSuspended(true) }, height = 36.dp)
                 MnemoButton("Unsuspend", onClick = { vm.setSuspended(false) }, height = 36.dp)
                 MnemoButton("Reset", onClick = vm::resetSelected, height = 36.dp)
@@ -304,13 +374,62 @@ fun BrowseScreen(
                         "tag:verb — cards with a tag\n" +
                         "deck:German — a deck and its sub-decks\n" +
                         "is:due  is:new  is:learn  is:review\n" +
-                        "is:suspended  is:leech\n" +
+                        "is:suspended  is:leech  is:buried\n" +
+                        "flag:1 … flag:7 (flag:0 none)\n" +
+                        "rated:7  rated:7:1 (pressed Again)\n" +
+                        "added:3  edited:3  introduced:7\n" +
+                        "prop:ivl>=30  prop:due=1  prop:lapses>3\n" +
+                        "prop:s>100 (stability)  prop:d>0.7 (difficulty)\n" +
+                        "note:Basic  card:2  nid:123,456\n" +
                         "\"exact phrase\" — words together\n" +
                         "-word — leave out cards with it",
                     color = MnemoColors.text2,
                 )
             },
             confirmButton = { TextButton(onClick = { help = false }) { Text("OK", color = MnemoColors.coral) } },
+        )
+    }
+    state.message?.let { msg ->
+        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomCenter) {
+            Text(
+                msg,
+                style = MaterialTheme.typography.labelLarge,
+                color = MnemoColors.background,
+                modifier =
+                    Modifier
+                        .clip(
+                            RoundedCornerShape(999.dp),
+                        ).background(MnemoColors.text)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+            )
+        }
+    }
+    infoCard?.let { CardInfoDialog(it, onDismiss = { infoCard = null }) }
+    if (setDue) {
+        SetDueDialog(state.selected.size, onDismiss = { setDue = false }) { spec ->
+            if (vm.setDueDate(spec)) setDue = false
+        }
+    }
+    if (replaceDialog) {
+        FindReplaceDialog(
+            selectedCards = state.selected.size,
+            matched = state.matched,
+            noteTypes = state.noteTypes,
+            onDismiss = { replaceDialog = false },
+            onReplace = vm::findReplace,
+        )
+    }
+    if (dupesDialog) {
+        DuplicatesDialog(
+            noteTypes = state.noteTypes,
+            find = vm::duplicates,
+            onDismiss = { dupesDialog = false },
+            onShow = { ids ->
+                dupesDialog = false
+                filter = null
+                deck = null
+                text = "nid:" + ids.joinToString(",")
+            },
         )
     }
     if (tagDialog) {
@@ -400,6 +519,10 @@ private fun CardRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                if (c.flag != 0) {
+                    Spacer(Modifier.width(6.dp))
+                    FlagMark(c.flag)
+                }
                 Spacer(Modifier.width(10.dp))
                 Text(
                     dueLabel(c.due, now, c.state),

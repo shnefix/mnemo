@@ -23,6 +23,21 @@ data class Scheduled(
 }
 
 /**
+ * What the scheduler needs to spread reviews out (Anki's load balancing and easy days):
+ * how many reviews already fall on each coming day, and which weekday a day is.
+ */
+interface LoadBalancer {
+    /** Reviews due on the study day [dayOffset] days after today. */
+    fun reviewsOn(dayOffset: Int): Int
+
+    /** Weekday of that day, 0 = Monday … 6 = Sunday. */
+    fun weekday(dayOffset: Int): Int
+
+    /** A card was just given a review on [dayOffset] (so later picks see it). */
+    fun record(dayOffset: Int)
+}
+
+/**
  * Turns a grade into a new card state: learning/relearning steps for the short
  * term, the FSRS memory model for the long term. This mirrors
  * py-fsrs `Scheduler.review_card` step by step; the memory maths lives in [Fsrs].
@@ -33,6 +48,8 @@ class Scheduler(
     private val fsrs: Fsrs = Fsrs(),
     private val settings: DeckSettings = DeckSettings(),
     private val fuzz: Random? = Random.Default,
+    /** Spreads review intervals over quiet days and away from easy days (needs [fuzz]). */
+    private val balancer: LoadBalancer? = null,
 ) {
     private val learningSteps: List<Long> = settings.learningSteps.map { it * MINUTE_MS }
     private val relearningSteps: List<Long> = settings.relearningSteps.map { it * MINUTE_MS }
@@ -249,8 +266,42 @@ class Scheduler(
         val minIvl = max(2, (d - delta).roundToInt())
         val maxIvl = min((d + delta).roundToInt(), settings.maximumIntervalDays)
         val minClamped = min(minIvl, maxIvl)
+        balancedDay(minClamped, maxIvl, random)?.let { return it }
         val fuzzedDays = (random.nextDouble() * (maxIvl - minClamped + 1) + minClamped).toInt()
         return min(fuzzedDays, settings.maximumIntervalDays)
+    }
+
+    /**
+     * Load balancing and easy days, after Anki 24.11: every day in the fuzz range gets a weight
+     * that falls with the reviews already due that day (squared), with the interval, and with the
+     * weekday's easy-day setting; one day is drawn by weight. Null when neither is switched on.
+     */
+    private fun balancedDay(
+        lo: Int,
+        hi: Int,
+        random: Random,
+    ): Int? {
+        val b = balancer ?: return null
+        val easy = settings.hasEasyDays
+        if (!settings.loadBalance && !easy) return null
+        val days = (lo..hi).toList()
+        if (days.size < 2) return null
+
+        fun weights(useEasy: Boolean) =
+            days.map { d ->
+                val load = if (settings.loadBalance) 1.0 / (b.reviewsOn(d) + 1.0).let { it * it } else 1.0
+                val easyFactor = if (useEasy) settings.easyDays.getOrElse(b.weekday(d)) { 1.0 }.coerceIn(0.0, 1.0) else 1.0
+                load * easyFactor / d
+            }
+        var w = weights(easy)
+        // Every day in range set to "minimum": spread as if there were no easy days.
+        if (w.sum() <= 0.0) w = weights(false)
+        var pick = random.nextDouble() * w.sum()
+        for (i in days.indices) {
+            pick -= w[i]
+            if (pick <= 0) return days[i]
+        }
+        return days.last()
     }
 
     private companion object {

@@ -74,6 +74,7 @@ object ApkgImporter {
         val factor: Long,
         val reps: Long,
         val lapses: Long,
+        val flags: Long = 0,
     )
 
     suspend fun import(
@@ -181,7 +182,7 @@ object ApkgImporter {
             }
         val cards =
             db
-                .query("SELECT id, nid, did, ord, type, queue, due, ivl, factor, reps, lapses FROM cards")
+                .query("SELECT id, nid, did, ord, type, queue, due, ivl, factor, reps, lapses, flags FROM cards")
                 .map { r ->
                     AnkiCard(
                         r.long("id"),
@@ -195,6 +196,7 @@ object ApkgImporter {
                         r.long("factor"),
                         r.long("reps"),
                         r.long("lapses"),
+                        r.long("flags") and 7L,
                     )
                 }.groupBy { it.nid }
         val revlog =
@@ -245,6 +247,16 @@ object ApkgImporter {
             val noteCards = cards[note.id].orEmpty().sortedBy { it.ord }
             if (noteCards.isEmpty()) {
                 skipped += 1
+                continue
+            }
+            val occlusionField = note.fields.firstOrNull { "image-occlusion:" in it }
+            if (occlusionField != null) {
+                if (importOcclusion(graph, note, occlusionField, model, noteCards, mnemoTypes, ::mnemoDeck, now, crtMs)) {
+                    noteCount += 1
+                    cardCount += noteCards.size
+                } else {
+                    skipped += 1
+                }
                 continue
             }
             val converted = note.fields.map { AnkiHtml.toMarkdown(it) }
@@ -310,6 +322,7 @@ object ApkgImporter {
                         cardId,
                     )
                     if (c.queue == -1L) dbx.cardQueries.setSuspended(1L, cardId)
+                    if (c.flags != 0L) dbx.cardQueries.setFlag(c.flags, cardId)
                     if (c.queue == -2L || c.queue == -3L) dbx.cardQueries.setBuried(nowMs + DAY_MS, cardId)
                     revlog.filter { it.long("cid") == c.id }.forEach { r ->
                         val type = r.long("type")
@@ -355,6 +368,76 @@ object ApkgImporter {
             skippedNotes = skipped,
             warnings = warnings,
         )
+    }
+
+    /**
+     * An Anki image-occlusion note → a Mnemo one: the boxes, the picture and the header and
+     * back text, with each card's scheduling. False when it has no picture or no boxes.
+     */
+    private suspend fun importOcclusion(
+        graph: AppGraph,
+        note: AnkiNote,
+        occlusionField: String,
+        model: AnkiModel?,
+        noteCards: List<AnkiCard>,
+        types: Map<NoteKind, app.mnemo.domain.model.NoteType>,
+        deckOf: suspend (Long) -> Long,
+        now: Long,
+        crtMs: Long,
+    ): Boolean {
+        val type = types[NoteKind.Occlusion] ?: return false
+        val names = model?.fields.orEmpty()
+
+        fun field(vararg wanted: String): String =
+            wanted
+                .firstNotNullOfOrNull { w -> names.indexOfFirst { it.equals(w, ignoreCase = true) }.takeIf { it >= 0 } }
+                ?.let { note.fields.getOrNull(it) }
+                .orEmpty()
+        val imageHtml = field("Image").ifEmpty { note.fields.firstOrNull { "<img" in it }.orEmpty() }
+        val image = Regex("""<img[^>]+src=["']([^"']+)["']""").find(imageHtml)?.groupValues?.get(1) ?: return false
+        val size =
+            MediaFiles.read(image)?.let { app.mnemo.platform.decodeImage(it) }?.let { it.width to it.height }
+        val occ =
+            app.mnemo.domain.cards.Occlusions
+                .fromAnki(occlusionField, size)
+        if (occ.masks.isEmpty()) return false
+        val fields =
+            linkedMapOf(
+                "Image" to image,
+                "Occlusions" to occ.encode(),
+                "Header" to AnkiHtml.toMarkdown(field("Header")),
+                "Back Extra" to
+                    listOf(field("Back Extra"), field("Comments"))
+                        .map { AnkiHtml.toMarkdown(it) }
+                        .filter { it.isNotBlank() }
+                        .joinToString("\n\n"),
+                "_guid" to note.guid,
+            )
+        val noteId =
+            graph.notes.create(deckOf(noteCards.first().did), type, fields, note.tags.map { it.replace("::", "-") })
+        val cards = graph.cards.byNote(noteId)
+        for (c in noteCards) {
+            val index = occ.groups.indexOf(c.ord + 1)
+            val card = cards.firstOrNull { it.templateIndex == index } ?: continue
+            val s = convertScheduling(c, crtMs, now)
+            graph.cards.save(
+                card.copy(
+                    state = s.state,
+                    due = s.due,
+                    stability = s.stability,
+                    difficulty = s.difficulty,
+                    elapsedDays = s.elapsed.toInt(),
+                    scheduledDays = s.scheduled.toInt(),
+                    reps = c.reps.toInt(),
+                    lapses = c.lapses.toInt(),
+                    lastReview = s.lastReview,
+                    learningStep = s.step?.toInt(),
+                ),
+            )
+            if (c.queue == -1L) graph.cards.setSuspended(card.id, true)
+            if (c.flags != 0L) graph.cards.setFlag(listOf(card.id), c.flags.toInt())
+        }
+        return true
     }
 
     private class Sched(
