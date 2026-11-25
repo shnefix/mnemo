@@ -82,6 +82,19 @@ class ReviewViewModel(
 
     init {
         viewModelScope.launch {
+            try {
+                start()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                println("MNEMO_REVIEW_ERROR " + e.stackTraceToString())
+                _state.update { it.copy(loading = false, finished = true, toast = "Couldn't load cards: ${e.message}") }
+            }
+        }
+    }
+
+    private suspend fun start() {
+        run {
             types = graph.notes.noteTypes().associateBy { it.id }
             val deck = deckId?.let { graph.decks.byId(it) }
             val study = custom?.let { CustomStudy.decode(it) }

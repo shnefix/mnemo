@@ -76,7 +76,7 @@ JOIN note ON note.id = card.note_id
 WHERE note.deck_id IN ? AND card.suspended = 0 AND card.state = 0
   AND (card.buried_until IS NULL OR card.buried_until <= :now)
   AND (:onePerNote = 0 OR card.id = (
-    SELECT min(c2.id) FROM card c2
+    SELECT min(c2.id) FROM card c2 INDEXED BY card_note
     WHERE c2.note_id = card.note_id AND c2.state = 0 AND c2.suspended = 0
       AND (c2.buried_until IS NULL OR c2.buried_until <= :now)))
 ORDER BY CASE WHEN :shuffled = 1 THEN (card.id * 1103515245 + :seed) % 2147483647 ELSE card.due END, card.id
