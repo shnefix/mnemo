@@ -1,0 +1,45 @@
+# Source: history of AI cards
+
+Format: Event | Year | What happened
+
+- McCulloch and Pitts' artificial neuron | 1943 | The first mathematical model of a neuron: weighted inputs, a threshold, an on/off output. Every artificial neural network descends from it.
+- Turing's "Computing Machinery and Intelligence" | 1950 | Turing replaced "Can machines think?" with the imitation game (the Turing test): if you can't tell the machine's answers from a person's, call it intelligent.
+- The Dartmouth workshop | 1956 | McCarthy, Minsky, Rochester and Shannon's summer research project. Its 1955 proposal coined the name "artificial intelligence"; it counts as the birth of AI as a field.
+- The Logic Theorist | 1956 | Newell, Simon and Shaw's program proved theorems from Principia Mathematica. Often called the first AI program: reasoning as search through possible steps.
+- Rosenblatt's perceptron | 1958 | A single-layer neural network that learned to classify simple pictures from examples, built as the Mark I Perceptron machine. The press promised machines that would soon walk and talk.
+- LISP | 1958 | John McCarthy's programming language, built on symbols and lists. It was the main language of AI research for about 30 years.
+- Arthur Samuel's checkers program | 1959 | A checkers player that got better by playing against itself. Samuel's 1959 paper made the term "machine learning" popular.
+- ELIZA | 1966 | Joseph Weizenbaum's chatbot played a therapist by matching patterns and turning your words into questions. People confided in it anyway: the "ELIZA effect".
+- Shakey the robot | 1966–1972 | SRI's mobile robot was the first to plan its own actions. The project gave us the A* search algorithm and the STRIPS planner.
+- Minsky and Papert's book "Perceptrons" | 1969 | It proved that a single-layer perceptron cannot learn functions such as XOR. Funding for neural networks dried up for more than a decade.
+- The Lighthill Report and the first AI winter | 1973 | A report for the UK government said AI had not delivered what it promised. Funding was cut in the UK and the US: the first "AI winter" of the mid-1970s.
+- Expert systems in business (XCON) | 1980 | Rule-based systems captured specialists' knowledge as if-then rules. DEC's XCON configured computer orders and saved millions a year: AI's first big commercial success.
+- Japan's Fifth Generation Computer project | 1982 | A ten-year national programme to build logic-programming AI computers. It fell short, but it pushed the US and UK into funding AI again.
+- Hopfield networks | 1982 | John Hopfield's recurrent network stores memories as stable states of an energy function. It made physicists and computer scientists take neural networks seriously again.
+- Backpropagation made popular | 1986 | Rumelhart, Hinton and Williams showed in Nature how to train networks with hidden layers: send the error backwards with the chain rule. It solved the XOR problem that had stopped perceptrons.
+- The second AI winter | 1987 | The market for special LISP machines collapsed and expert systems proved costly to keep up to date. Funding and interest fell again into the early 1990s.
+- LeNet reads handwritten digits | 1989 | Yann LeCun's convolutional network read ZIP codes on US post. Later versions read a large share of the cheques written in the US.
+- TD-Gammon | 1992 | Gerald Tesauro's backgammon program learned by playing itself with temporal-difference learning and reached close to world-champion level.
+- Support vector machines take off | 1995 | Cortes and Vapnik's soft-margin SVM: find the boundary with the widest margin. With kernels, SVMs led many benchmarks until deep learning.
+- Long short-term memory (LSTM) | 1997 | Hochreiter and Schmidhuber added gates to recurrent networks so they can keep information over long sequences without the gradient vanishing.
+- Deep Blue beats Kasparov | 1997 | IBM's chess computer beat the world champion 3½–2½ in a six-game match, with brute-force search and hand-tuned evaluation, not learning.
+- Deep belief networks and "deep learning" | 2006 | Hinton, Osindero and Teh trained deep networks one layer at a time. The start of the name "deep learning" and of neural networks' comeback.
+- The ImageNet dataset | 2009 | Fei-Fei Li's team labelled over 14 million images in about 20,000 categories. Its yearly challenge (2010–2017) became the benchmark for computer vision.
+- IBM Watson wins Jeopardy! | 2011 | Watson beat champions Ken Jennings and Brad Rutter at the TV quiz, combining search, language processing and answer ranking.
+- AlexNet | 2012 | Krizhevsky, Sutskever and Hinton's convolutional network, trained on two GPUs, won ImageNet with a top-5 error of 15.3% against 26.2% for the next team. The moment deep learning took over.
+- word2vec | 2013 | Mikolov and colleagues at Google learned word vectors where meaning becomes geometry: king − man + woman ≈ queen.
+- DeepMind's Atari player (DQN) | 2013 | One deep Q-network learned to play dozens of Atari games from the raw pixels and the score alone.
+- Generative adversarial networks (GANs) | 2014 | Ian Goodfellow's idea: a generator makes fakes, a discriminator tries to spot them, and both improve. The first very realistic generated faces.
+- Neural machine translation and attention | 2014 | Sequence-to-sequence networks (Sutskever and colleagues) and attention (Bahdanau, Cho and Bengio) translated whole sentences. Google Translate switched to a neural system in 2016.
+- ResNet | 2015 | He and colleagues' residual connections made networks of 152 layers trainable. It won ImageNet with an error below the roughly 5% estimated for humans.
+- AlphaGo beats Lee Sedol | 2016 | DeepMind's Go program won 4–1 against one of the best players in the world, combining deep networks with tree search. Its "move 37" in game 2 surprised every expert.
+- The Transformer | 2017 | "Attention Is All You Need" replaced recurrence with self-attention, so whole sequences are processed in parallel. Almost every modern language model is a Transformer.
+- BERT and the first GPT | 2018 | Pre-train a Transformer on huge amounts of plain text, then fine-tune it: OpenAI's GPT (a decoder) and Google's BERT (an encoder) made this the standard recipe.
+- GPT-2's staged release | 2019 | OpenAI first held back its 1.5-billion-parameter model over misuse fears and released it in stages: the start of the debate about releasing powerful models.
+- GPT-3 | 2020 | 175 billion parameters. It could do new tasks from a few examples in the prompt, without any training: "few-shot" or in-context learning.
+- AlphaFold 2 | 2020 | DeepMind's model predicted the 3D shape of proteins almost as accurately as lab experiments. Hassabis and Jumper shared the 2024 Nobel Prize in Chemistry for it.
+- Text-to-image goes mainstream | 2021 | OpenAI's CLIP and DALL·E linked pictures and text (January 2021); Stable Diffusion was released openly in 2022.
+- ChatGPT | 2022 | Released on 30 November 2022: a chat interface on a GPT-3.5 model tuned with human feedback (RLHF). It reached an estimated 100 million users in about two months.
+- GPT-4 and open-weight models | 2023 | GPT-4 (March 2023) could read images and passed many professional exams; Meta's LLaMA (February 2023) started the wave of open-weight models.
+- Nobel Prizes for AI | 2024 | Physics: John Hopfield and Geoffrey Hinton, for neural networks. Chemistry: Demis Hassabis and John Jumper (AlphaFold), with David Baker.
+- The EU AI Act | 2024 | The first broad law on AI. Rules depend on the risk: some uses are banned (such as social scoring), high-risk systems need checks, chatbots must say they are AI. In force since August 2024.
