@@ -23,6 +23,7 @@ import kotlinx.coroutines.sync.withLock
  *  9. Numbers to know: memory, compute, dataset sizes, defaults.
  *  10. Code: PyTorch, scikit-learn, NumPy and Hugging Face snippets with a blank.
  *  11. Tools: what each library or service is for.
+ *  12. Writing prompts: techniques for writing a good prompt (added in version 2).
  * Cards carry a topic tag (`ml-<topic>`); [syncGraph] puts the topics on the knowledge graph as a
  * concept map, with the order to learn them in.
  *
@@ -32,7 +33,7 @@ object AiDeck {
     const val ROOT = "AI & ML"
 
     /** Bump when the content changes; older installs are updated on the next launch. */
-    const val VERSION = 1
+    const val VERSION = 2
 
     val history = Section("1. History", 2, "history")
     val people = Section("2. People", 1, "people")
@@ -45,6 +46,7 @@ object AiDeck {
     val numbers = Section("9. Numbers to know", 1, "numbers")
     val code = Section("10. Code", 2, "code")
     val tools = Section("11. Tools", 1, "tools")
+    val prompts = Section("12. Writing prompts", 2, "prompting")
 
     /** Prefix of the diagram pictures in the media folder. */
     internal const val MEDIA_PREFIX = "mnemo-ai-"
@@ -137,6 +139,9 @@ object AiDeck {
         packs(numbers, "Numbers", numberCards())
         packs(code, "Code", codeCards())
         packs(tools, "Tools", toolCards())
+        // Added in version 2: created on older installs too.
+        seed.alwaysCreate(promptCards())
+        packs(prompts, "Prompts", promptCards())
         return seed.commit()
     }
 
@@ -236,6 +241,18 @@ object AiDeck {
         rows(AiDeckContent.TOOLS).map { r ->
             val (tool, what) = fieldsOf(r)
             Card(mapOf("Front" to "**$tool**\n\n*What is it for?*", "Back" to what), topicTag(r))
+        }
+
+    internal fun promptCards(): List<Card> =
+        rows(AiDeckContent.PROMPTS).map { r ->
+            val (technique, what, example) = fieldsOf(r)
+            Card(
+                mapOf(
+                    "Front" to "**$technique**\n\n*What is it, and why does it work?*",
+                    "Back" to "$what\n\n> **In the AI history prompt:** $example",
+                ),
+                topicTag(r),
+            )
         }
 
     /**

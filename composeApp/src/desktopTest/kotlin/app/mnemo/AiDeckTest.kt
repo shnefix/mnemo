@@ -38,6 +38,7 @@ class AiDeckTest {
                 "numbers" to (AiDeckContent.NUMBERS to 3),
                 "code" to (AiDeckContent.CODE to 4),
                 "tools" to (AiDeckContent.TOOLS to 2),
+                "prompts" to (AiDeckContent.PROMPTS to 3),
             )
         sections.forEach { (name, pair) ->
             val (text, width) = pair
@@ -92,7 +93,7 @@ class AiDeckTest {
             val decks = g.decks.all()
             val root = decks.single { it.name == AiDeck.ROOT && it.parentId == null }
             val sections = decks.filter { it.parentId == root.id }.map { it.name }
-            assertEquals(11, sections.size, "$sections")
+            assertEquals(12, sections.size, "$sections")
             assertTrue(decks.any { it.name == "Diagrams 01" })
 
             // The pictures are in the media folder, and the cards point at them.

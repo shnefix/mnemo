@@ -340,4 +340,28 @@ spaCy|Fast natural-language processing pipelines: tokens, entities, parts of spe
 Gradio and Streamlit|Turn a model into a small web demo with a few lines of Python.|#mlops
 Model Context Protocol (MCP)|An open standard (Anthropic, 2024) for connecting AI apps to tools and data sources through one interface.|#llmuse
 """
+
+    /** technique | what it is and why it works | how "The Long Road to Thinking Machines" prompt does it | #topic */
+    const val PROMPTS = """
+Give the piece a title|A working title tells the model what the whole thing is about and sets its tone before any detail.|"Turn the sources into a narrated story called 'The Long Road to Thinking Machines'": the title alone promises a journey.|#llmuse
+State the task in the first sentence|Lead with the one thing you want done; everything after it is detail. The model reads the rest in the light of that sentence.|It opens with "Turn the sources into a narrated story…", not with background.|#llmuse
+Name the format you want, and the one you don't|Saying what to avoid is as useful as saying what to do when the model has a default it falls back to.|"Structure it as a story in chapters, not a list of facts": it blocks the default bullet-point summary.|#llmuse
+Give the structure as a numbered outline|A numbered list of parts fixes the order, the coverage and the boundaries, so nothing is skipped or merged.|Six chapters, each with a name and a date range: "1. The Dream (1943–1959)…".|#llmuse
+Name each part evocatively|Short memorable names give each section a mood and a role in the story, not just a topic.|"Hype and the First Winter", "Quiet Builders", "The Deep Learning Explosion".|#llmuse
+List the key items per part|Naming what must appear in each section stops the model from guessing what matters, and keeps it on your sources.|Chapter 4 lists LeNet, TD-Gammon, SVMs, LSTM, Deep Blue, deep belief networks, ImageNet.|#llmuse
+Pin down the voice with adjectives|Two or three precise adjectives describe a whole style more compactly than a paragraph of rules.|"A dramatic, cinematic narrator."|#llmuse
+Give the story an emotional shape|Tell the model where the highs and lows are; a narrative needs tension and release, not equal weight on everything.|"Treat the winters as low points and the comebacks as turning points."|#llmuse
+Set an accuracy guardrail|When style is dramatic, say explicitly that facts must not bend to it.|"Keep every date and name accurate to the sources."|#llmuse
+Set a length budget per part|A concrete limit per section keeps the parts balanced and the whole a predictable length.|"Keep each chapter to about 2 minutes."|#llmuse
+Say how to handle jargon|Name the audience's level by saying what to do with hard words, not by describing the audience.|"Explain jargon in one plain sentence."|#llmuse
+Ask for a specific ending|Endings drift into vague summaries unless you say what the last part should do.|"End with a reflection on what the pattern of hype, disappointment and breakthrough suggests about what comes next."|#llmuse
+Separate content from visuals|Put look-and-feel in its own paragraph so it can be reused or dropped for outputs that have no visuals.|The last paragraph starts "Visual style (for slides, video or infographic output):".|#llmuse
+Use exact values for colours|A hex code removes all doubt; "dark blue" can mean a hundred things.|"near-black navy or charcoal (#0B0F1A)".|#llmuse
+Tie visuals to meaning|Map each visual choice to a part of the story so the design carries the narrative.|"Icy blue tones for AI winter chapters and warm amber for breakthroughs."|#llmuse
+Add one recurring visual anchor|A single element that stays across sections makes many slides feel like one piece and shows progress.|"A thin horizontal timeline that stays visible across chapters."|#llmuse
+End with a hard rule|A short, absolute rule at the end is easy to obey and easy to check.|"No white backgrounds."|#llmuse
+Keep the source separate from the prompt|Facts go in a source file, instructions in the prompt: the facts can be checked and reused, and the prompt stays short.|ai_history_source.md holds "Event · Year · What happened" rows; the prompt only says what to do with them.|#llmuse
+Give the source a clear format line|A header such as "Format: Event · Year · What happened" tells the model (and you) how to read every row.|The source file starts with its format, then one event per line.|#llmuse
+Write each fact as what plus why|A fact with its consequence gives the narrator something to dramatise, not just a date to read out.|"Funding for neural networks dried up for more than a decade" after the "Perceptrons" book.|#llmuse
+"""
 }
